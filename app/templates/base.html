@@ -6,7 +6,40 @@
   <title>{% block title %}NTC Licensing{% endblock %}</title>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>.htmx-indicator{opacity:0;transition:opacity .15s ease-in}.htmx-request.htmx-indicator,.htmx-request .htmx-indicator{opacity:1}</style>
+  <script>
+    // Custom palette on top of Tailwind's defaults -- gives the AdminLTE-ish
+    // "brand purple" topbar / near-black sidebar a name so templates don't
+    // have to hardcode hex classes everywhere. Pure styling, no behavior.
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#5b21b6',
+              50:  '#f5f3ff',
+              100: '#ede9fe',
+              200: '#ddd6fe',
+              500: '#7c3aed',
+              600: '#6d28d9',
+              700: '#5b21b6',
+              800: '#4c1d95',
+              900: '#3b1370',
+            },
+            sidebar: {
+              DEFAULT: '#1a1d29',
+              light: '#232634',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .htmx-indicator{opacity:0;transition:opacity .15s ease-in}
+    .htmx-request.htmx-indicator,.htmx-request .htmx-indicator{opacity:1}
+    ::-webkit-scrollbar{width:8px;height:8px}
+    ::-webkit-scrollbar-thumb{background:#c7c7d1;border-radius:4px}
+  </style>
   <script>
   // ---------------------------------------------------------------------
   // Auth glue for the new HTMX/Jinja2 UI (/app/*). Deliberately reuses the
@@ -90,9 +123,11 @@
   })();
   </script>
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body class="bg-gray-100 text-gray-900">
+  {% block body %}
   <main class="max-w-5xl mx-auto p-6">
     {% block content %}{% endblock %}
   </main>
+  {% endblock %}
 </body>
 </html>

@@ -1,28 +1,47 @@
-<table class="w-full text-sm border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-sm border-collapse">
   <thead>
-    <tr class="text-left border-b border-gray-200 bg-gray-100">
-      <th class="py-2 px-3">License No.</th>
-      <th class="py-2 px-3">Licensee</th>
-      <th class="py-2 px-3">Site</th>
-      <th class="py-2 px-3">Province</th>
-      <th class="py-2 px-3">Status</th>
-      <th class="py-2 px-3"></th>
+    <tr class="text-left bg-gray-50 border-b border-gray-200">
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Site</th>
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Province</th>
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
+      <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Action</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody class="divide-y divide-gray-100">
     {% for lic in results %}
-    <tr class="border-b border-gray-100 hover:bg-gray-50">
-      <td class="py-2 px-3">{{ lic.license_no or "" }}</td>
-      <td class="py-2 px-3">{{ lic.licensee or "" }}</td>
-      <td class="py-2 px-3">{{ lic.site_name or "" }}</td>
-      <td class="py-2 px-3">{{ lic.province or "" }}</td>
-      <td class="py-2 px-3">{{ lic.license_status or lic.status or "" }}</td>
-      <td class="py-2 px-3 text-right">
-        <a href="/app/licenses/{{ lic.id }}" class="text-blue-600 hover:underline">View / Edit</a>
+    {% set status_text = (lic.license_status or lic.status or "") %}
+    <tr class="odd:bg-white even:bg-gray-50/60 hover:bg-brand-50 transition-colors">
+      <td class="py-2.5 px-4 font-medium text-gray-700">{{ lic.license_no or "" }}</td>
+      <td class="py-2.5 px-4 text-gray-600">{{ lic.licensee or "" }}</td>
+      <td class="py-2.5 px-4 text-gray-600">{{ lic.site_name or "" }}</td>
+      <td class="py-2.5 px-4 text-gray-600">{{ lic.province or "" }}</td>
+      <td class="py-2.5 px-4">
+        {% if status_text %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium
+                     {% if status_text|lower in ['active','approved','valid'] %}bg-emerald-100 text-emerald-700
+                     {% elif status_text|lower in ['expired','cancelled','revoked','denied'] %}bg-red-100 text-red-700
+                     {% elif status_text|lower in ['pending','processing','renewal'] %}bg-orange-100 text-orange-700
+                     {% else %}bg-gray-100 text-gray-600{% endif %}">
+          {{ status_text }}
+        </span>
+        {% endif %}
+      </td>
+      <td class="py-2.5 px-4 text-right">
+        <a href="/app/licenses/{{ lic.id }}"
+           class="inline-flex items-center gap-1 text-brand-600 hover:text-brand-800 font-medium">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6.586-6.586a2 2 0 112.828 2.828L11.828 13.828a4 4 0 01-1.414.94l-3 1 1-3a4 4 0 01.94-1.414L9 11zM5 19h14"/>
+          </svg>
+          View / Edit
+        </a>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="py-6 text-center text-gray-400">No results.</td></tr>
+    <tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">No results.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
