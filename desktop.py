@@ -47,8 +47,16 @@ def start_server():
 
 
 def main_entry():
-    # always run from this file's folder so it finds telco.db, index.html, etc.
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    # Always run from the folder that holds telco.db, index.html, the print
+    # templates, etc. When this is running as a normal .py file that's this
+    # file's own folder. When it's running as a PyInstaller-frozen .exe,
+    # __file__ points *inside* the temporary extraction bundle instead
+    # (sys._MEIPASS) -- the data files live next to the real .exe, so we
+    # need sys.executable's folder in that case instead.
+    if getattr(sys, "frozen", False):
+        os.chdir(os.path.dirname(os.path.abspath(sys.executable)))
+    else:
+        os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     try:
         import webview
