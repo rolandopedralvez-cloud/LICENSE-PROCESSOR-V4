@@ -1,0 +1,131 @@
+{% extends "app/_shell.html" %}
+{% block title %}{% if lic_id %}Edit License — NTC{% else %}New License — NTC{% endif %}{% endblock %}
+{% block app_content %}
+
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-semibold">
+    {% if lic_id %}Edit License #{{ lic_id }}{% else %}New License{% endif %}
+  </h1>
+  <a href="/app" class="text-sm text-gray-600 hover:underline">&larr; Back to search</a>
+</div>
+
+<div id="form-status" class="text-sm mb-3 hidden"></div>
+
+<form id="license-form" class="space-y-6">
+  {% for section_name, fields in sections %}
+  <fieldset class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+    <legend class="font-medium px-1">{{ section_name }}</legend>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+      {% for field, label in fields %}
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">{{ label }}</label>
+        <input
+          name="{{ field }}"
+          type="text"
+          value="{{ (license[field] if license else '') or '' }}"
+          class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+      </div>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% endfor %}
+
+  <div class="flex items-center gap-3">
+    <button type="submit"
+            class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 font-medium">
+      {% if lic_id %}Save Changes{% else %}Create License{% endif %}
+    </button>
+
+    {% if lic_id %}
+    <button type="button" id="btn-delete"
+            class="bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-lg px-4 py-2">
+      Delete (move to Trash)
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+{% if lic_id %}
+<div class="mt-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+  <h2 class="font-medium mb-2">Print RSL</h2>
+  <p class="text-xs text-gray-500 mb-3">
+    Opens/prints via Excel or Word on the machine running this server — needs Microsoft Excel/Word and only works on Windows.
+  </p>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'preview')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Excel: Preview</button>
+    <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'print')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Excel: Print</button>
+    <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'open')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Excel: Open</button>
+    <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'preview')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Word: Preview</button>
+    <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'print')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Word: Print</button>
+    <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'open')"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50">Word: Open</button>
+  </div>
+</div>
+{% endif %}
+
+<script>
+const LIC_ID = {{ lic_id if lic_id else 'null' }};
+const statusBox = document.getElementById('form-status');
+
+function showStatus(msg, isError) {
+  statusBox.textContent = msg;
+  statusBox.classList.remove('hidden', 'text-green-700', 'text-red-600');
+  statusBox.classList.add(isError ? 'text-red-600' : 'text-green-700');
+}
+
+document.getElementById('license-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(e.target).entries());
+  try {
+    const res = await window.ntcFetch(
+      LIC_ID ? '/api/licenses/' + LIC_ID : '/api/licenses',
+      { method: LIC_ID ? 'PUT' : 'POST', body: JSON.stringify(data) }
+    );
+    const body = await res.json();
+    if (!res.ok) {
+      showStatus(body.detail || 'Save failed.', true);
+      return;
+    }
+    if (LIC_ID) {
+      showStatus('Saved.', false);
+    } else {
+      window.location.href = '/app/licenses/' + body.id;
+    }
+  } catch (err) {
+    showStatus('Could not reach the server.', true);
+  }
+});
+
+{% if lic_id %}
+document.getElementById('btn-delete').addEventListener('click', async function () {
+  if (!confirm('Move this record to Trash? It can be restored later from the classic UI\'s Trash bin.')) return;
+  try {
+    const res = await window.ntcFetch('/api/licenses/{{ lic_id }}', { method: 'DELETE' });
+    const body = await res.json();
+    if (!res.ok) { showStatus(body.detail || 'Delete failed.', true); return; }
+    window.location.href = '/app';
+  } catch (err) {
+    showStatus('Could not reach the server.', true);
+  }
+});
+
+async function ntcPrint(url, mode) {
+  showStatus('Working — ' + mode + '...', false);
+  try {
+    const res = await window.ntcFetch(url + '?mode=' + encodeURIComponent(mode), { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) { showStatus(body.detail || 'Print failed.', true); return; }
+    showStatus('Done: ' + mode + '.', false);
+  } catch (err) {
+    showStatus('Could not reach the server.', true);
+  }
+}
+{% endif %}
+</script>
+{% endblock %}

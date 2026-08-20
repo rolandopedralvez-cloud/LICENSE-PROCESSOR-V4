@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Sign in — NTC Licensing{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto mt-24">
+  <h1 class="text-xl font-semibold mb-6 text-center">NTC Licensing — Sign in</h1>
+
+  <form id="login-form" class="space-y-3 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">Username</label>
+      <input name="username" type="text" required autofocus
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">Password</label>
+      <input name="password" type="password" required
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    <div id="login-error" class="text-sm text-red-600 hidden"></div>
+    <button type="submit"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 font-medium">
+      Sign in
+    </button>
+  </form>
+
+  <p class="text-xs text-gray-400 text-center mt-4">
+    Same login as the classic app at <a class="underline" href="/">/</a> — one account works on both.
+  </p>
+</div>
+
+<script>
+document.getElementById('login-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const errBox = document.getElementById('login-error');
+  errBox.classList.add('hidden');
+  const form = new FormData(e.target);
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: form.get('username'),
+        password: form.get('password'),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      errBox.textContent = data.detail || 'Login failed.';
+      errBox.classList.remove('hidden');
+      return;
+    }
+    localStorage.setItem('ntc_token', data.token);
+    localStorage.setItem('ntc_role', data.role);
+    localStorage.setItem('ntc_user', data.username);
+    try { localStorage.setItem('ntc_perms', JSON.stringify(data.permissions || [])); } catch (e) {}
+    window.location.href = '/app';
+  } catch (err) {
+    errBox.textContent = 'Could not reach the server.';
+    errBox.classList.remove('hidden');
+  }
+});
+</script>
+{% endblock %}

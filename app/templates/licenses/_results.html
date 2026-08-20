@@ -1,0 +1,24 @@
+<table class="w-full text-sm border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
+  <thead>
+    <tr class="text-left border-b border-gray-200 bg-gray-100">
+      <th class="py-2 px-3">License No.</th>
+      <th class="py-2 px-3">Licensee</th>
+      <th class="py-2 px-3">Site</th>
+      <th class="py-2 px-3">Province</th>
+      <th class="py-2 px-3">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for lic in results %}
+    <tr class="border-b border-gray-100 hover:bg-gray-50">
+      <td class="py-2 px-3">{{ lic.license_no or "" }}</td>
+      <td class="py-2 px-3">{{ lic.licensee or "" }}</td>
+      <td class="py-2 px-3">{{ lic.site_name or "" }}</td>
+      <td class="py-2 px-3">{{ lic.province or "" }}</td>
+      <td class="py-2 px-3">{{ lic.license_status or lic.status or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="py-6 text-center text-gray-400">No results.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

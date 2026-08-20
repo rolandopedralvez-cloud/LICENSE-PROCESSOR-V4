@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}NTC Licensing{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>.htmx-indicator{opacity:0;transition:opacity .15s ease-in}.htmx-request.htmx-indicator,.htmx-request .htmx-indicator{opacity:1}</style>
+  <script>
+  // ---------------------------------------------------------------------
+  // Auth glue for the new HTMX/Jinja2 UI (/app/*). Deliberately reuses the
+  // EXACT same localStorage keys the existing index.html already uses
+  // (ntc_token / ntc_role / ntc_user / ntc_perms) so logging in on either
+  // UI works on both -- there is only one session, not two.
+  //
+  // Why this exists at all: every /api/* route is guarded by a middleware
+  // in app/main.py that requires an "Authorization: Bearer <token>"
+  // header. A normal browser page navigation or <a href> can't attach a
+  // custom header, and htmx doesn't send one by default either -- so
+  // without this, every write/read against /api/* from the new UI would
+  // 401 even for a logged-in user. This listens for htmx's
+  // configRequest event and injects the header from localStorage on
+  // every htmx-driven request; ntcFetch() below does the same for plain
+  // fetch() calls (used for create/edit/delete forms, which POST/PUT/
+  // DELETE directly against the existing JSON API rather than an
+  // HTML-returning endpoint).
+  // ---------------------------------------------------------------------
+  (function () {
+    const TOKEN_KEY = "ntc_token";
+
+    window.ntcToken = function () {
+      return localStorage.getItem(TOKEN_KEY) || "";
+    };
+    window.ntcUser = function () {
+      return localStorage.getItem("ntc_user") || "";
+    };
+    window.ntcRole = function () {
+      return localStorage.getItem("ntc_role") || "";
+    };
+    window.ntcAuthed = function () {
+      return !!window.ntcToken();
+    };
+    window.ntcLogout = function () {
+      localStorage.removeItem("ntc_token");
+      localStorage.removeItem("ntc_role");
+      localStorage.removeItem("ntc_user");
+      localStorage.removeItem("ntc_perms");
+      window.location.href = "/app/login";
+    };
+    // Redirect to login unless we already have a token. Call this at the
+    // top of any /app/* page that requires a signed-in user (every page
+    // except /app/login itself).
+    window.ntcRequireAuth = function () {
+      if (!window.ntcAuthed()) {
+        window.location.href = "/app/login";
+      }
+    };
+    // fetch() wrapper for the create/edit/delete forms: attaches the
+    // bearer token + JSON content type, and bounces to login on a 401
+    // (expired/invalid token) instead of leaving the user looking at a
+    // silently-failed request.
+    window.ntcFetch = async function (url, options) {
+      options = options || {};
+      options.headers = Object.assign(
+        {},
+        options.headers,
+        {
+          Authorization: "Bearer " + window.ntcToken(),
+          "Content-Type": "application/json",
+        }
+      );
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        window.location.href = "/app/login";
+        throw new Error("not authenticated");
+      }
+      return res;
+    };
+
+    document.addEventListener("htmx:configRequest", function (evt) {
+      const t = window.ntcToken();
+      if (t) evt.detail.headers["Authorization"] = "Bearer " + t;
+    });
+    document.addEventListener("htmx:responseError", function (evt) {
+      if (evt.detail.xhr && evt.detail.xhr.status === 401) {
+        window.location.href = "/app/login";
+      }
+    });
+  })();
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <main class="max-w-5xl mx-auto p-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

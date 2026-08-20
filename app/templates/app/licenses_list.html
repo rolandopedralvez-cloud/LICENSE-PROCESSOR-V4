@@ -1,0 +1,21 @@
+{% extends "app/_shell.html" %}
+{% block title %}Search Licenses — NTC{% endblock %}
+{% block app_content %}
+<h1 class="text-2xl font-semibold mb-1">Licenses</h1>
+<p class="text-sm text-gray-500 mb-4">Click a row to view/edit. Delete moves a record to Trash (recoverable).</p>
+
+<input
+  type="search"
+  name="q"
+  placeholder="Licensee, license no., or site name..."
+  class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  hx-get="/app/licenses/results"
+  hx-trigger="keyup changed delay:300ms, load"
+  hx-target="#results"
+  hx-indicator="#spinner"
+  autocomplete="off"
+>
+<span id="spinner" class="htmx-indicator text-sm text-gray-400">Searching…</span>
+
+<div id="results">Loading…</div>
+{% endblock %}
