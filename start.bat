@@ -28,7 +28,10 @@ if not exist "venv\Scripts\activate.bat" (
 call venv\Scripts\activate
 
 REM open the browser once the server answers (runs quietly in background)
-start "" /min cmd /c "for /L %%i in (1,1,90) do (curl -s -o nul http://127.0.0.1:8000 && (start http://127.0.0.1:8000 & exit) || (timeout /t 1 >nul))"
+REM Opens straight into the new /app UI (not the classic one at the bare
+REM root) -- same URL the packaged .exe opens, so testing here matches
+REM testing there.
+start "" /min cmd /c "for /L %%i in (1,1,90) do (curl -s -o nul http://127.0.0.1:8000/app/login && (start http://127.0.0.1:8000/app/login & exit) || (timeout /t 1 >nul))"
 
 echo Starting NTC Telco Database...
 echo Keep this window open while using the app. Close it to stop.
