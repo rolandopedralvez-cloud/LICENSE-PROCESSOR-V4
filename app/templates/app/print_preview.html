@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}Print Preview — {{ license_no or 'License' }}{% endblock %}
+{% block body %}
+<script>window.ntcRequireAuth();</script>
+
+<!-- Built-in Live Preview / Design mode / PDF export -- see
+     app/legacy/print_builtin.py for what this is and how it stays in sync
+     with the PDF export. Purely additive next to the existing Excel/Word
+     Print Preview (still on the license form's Print▾ menu) -- nothing
+     here changes that flow. -->
+
+<div class="min-h-screen bg-gray-200">
+
+  <!-- toolbar -->
+  <div id="ppv-toolbar" class="no-print sticky top-0 z-20 bg-white border-b border-gray-300 px-4 py-2.5 flex flex-wrap items-center gap-2">
+    <a href="/app/licenses/{{ lic_id }}" class="text-sm text-brand-600 hover:underline mr-2">&larr; Back to record</a>
+    <span class="text-sm text-gray-500 hidden sm:inline mr-auto">{{ license_no or '' }} &middot; {{ licensee or '' }}</span>
+
+    <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Design Mode: Off</button>
+    <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">+ Insert Text Box</button>
+    <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Delete Box</button>
+    <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-300 text-amber-700 rounded-md px-3 py-1.5 hover:bg-amber-50">Reset to Default</button>
+    <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5">Save Layout</button>
+
+    <button id="ppv-print" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Print</button>
+    <button id="ppv-pdf" class="text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5">Export PDF</button>
+  </div>
+
+  <!-- floating box-editor mini toolbar (design mode only) -->
+  <div id="ppv-box-toolbar" class="no-print hidden fixed z-30 bg-gray-800 text-white rounded-md shadow-lg px-2 py-1.5 flex items-center gap-2 text-xs">
+    <select id="ppv-font-family" class="bg-gray-700 text-white rounded px-1.5 py-1 text-xs border-none">
+      <option value="Helvetica">Sans-serif</option>
+      <option value="Times-Roman">Serif</option>
+      <option value="Courier">Monospace</option>
+    </select>
+    <span class="text-gray-300">Size</span>
+    <button id="ppv-font-minus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">&minus;</button>
+    <span id="ppv-font-size" class="w-6 text-center">10</span>
+    <button id="ppv-font-plus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">+</button>
+    <label class="flex items-center gap-1 ml-1">
+      <input type="checkbox" id="ppv-font-bold"> Bold
+    </label>
+    <span class="text-gray-400 ml-1">(double-click text to edit)</span>
+  </div>
+
+  <p id="ppv-status" class="no-print text-center text-sm text-gray-500 py-2"></p>
+
+  <!-- the certificate itself -- 612x792pt = US Letter, matches app/legacy/print_builtin.py's PDF page size exactly -->
+  <div id="ppv-page" class="relative bg-white shadow-lg mx-auto my-4" style="width:612pt;height:792pt;">
+    <img id="ppv-stamp" class="absolute pointer-events-none" style="display:none;" alt="">
+    <!-- boxes injected here by JS -->
+  </div>
+</div>
+
+<style>
+  @media print {
+    body * { visibility: hidden; }
+    #ppv-page, #ppv-page * { visibility: visible; }
+    #ppv-page { position: absolute; top: 0; left: 0; margin: 0; box-shadow: none; }
+    .no-print { display: none !important; }
+  }
+  @page { size: letter; margin: 0; }
+  .ppv-box { position: absolute; cursor: default; }
+  .ppv-box p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  #ppv-page.design-on .ppv-box { cursor: move; outline: 1px dashed transparent; }
+  #ppv-page.design-on .ppv-box:hover { outline-color: #a78bfa; }
+  .ppv-box.selected { outline: 1px solid #6d28d9 !important; }
+  .ppv-resize-handle {
+    position: absolute; right: -4px; bottom: -4px; width: 9px; height: 9px;
+    background: #6d28d9; border-radius: 2px; cursor: nwse-resize; display: none;
+  }
+  .ppv-box.selected .ppv-resize-handle { display: block; }
+</style>
+
+<script>
+(function () {
+  const LIC_ID = {{ lic_id }};
+  let TEMPLATE = null;
+  let FIELDS = {};
+  let DESIGN_ON = false;
+  let SELECTED_BOX = null;
+
+  const pageEl = document.getElementById('ppv-page');
+  const statusEl = document.getElementById('ppv-status');
+
+  function alignToCss(a) {
+    return a === 'center' ? 'center' : a === 'right' ? 'right' : 'left';
+  }
+
+  // Matches the 3 fonts app/legacy/print_builtin.py can actually put in the
+  // PDF (reportlab's built-in base fonts, no font files to install) -- so
+  // what you see here is what prints.
+  function cssFontFamily(font) {
+    if (font === 'Times-Roman') return "'Times New Roman', Times, serif";
+    if (font === 'Courier') return "'Courier New', Courier, monospace";
+    return "Arial, Helvetica, sans-serif";
+  }
+
+  function renderBoxText(box) {
+    return box.paragraphs.map(function (p) {
+      const spans = p.runs.map(function (r) {
+        if (r.type === 'br') return '<br>';
+        const text = r.type === 'field' ? (FIELDS[r.field] || '') : (r.text || '');
+        const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
+          ';font-family:' + cssFontFamily(r.font) + ';';
+        return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';
+      }).join('');
+      return '<p style="text-align:' + alignToCss(p.align) + ';">' + spans + '</p>';
+    }).join('');
+  }
+
+  function renderAll() {
+    pageEl.querySelectorAll('.ppv-box').forEach(function (el) { el.remove(); });
+    (TEMPLATE.boxes || []).forEach(function (box) {
+      const el = document.createElement('div');
+      el.className = 'ppv-box';
+      el.dataset.id = box.id;
+      el.style.left = box.x + 'pt';
+      el.style.top = box.y + 'pt';
+      el.style.width = box.w + 'pt';
+      el.style.height = box.h + 'pt';
+      el.innerHTML = renderBoxText(box);
+      const handle = document.createElement('div');
+      handle.className = 'ppv-resize-handle';
+      el.appendChild(handle);
+      pageEl.appendChild(el);
+    });
+    const img = document.getElementById('ppv-stamp');
+    if (TEMPLATE.image && TEMPLATE.image.data) {
+      img.src = TEMPLATE.image.data;
+      img.style.left = TEMPLATE.image.x + 'pt';
+      img.style.top = TEMPLATE.image.y + 'pt';
+      img.style.width = TEMPLATE.image.w + 'pt';
+      img.style.height = TEMPLATE.image.h + 'pt';
+      img.style.display = '';
+    }
+  }
+
+  async function loadEverything() {
+    statusEl.textContent = 'Loading…';
+    try {
+      const [tplRes, dataRes] = await Promise.all([
+        window.ntcFetchJSON('/api/print-template'),
+        window.ntcFetchJSON('/api/print-data/' + LIC_ID),
+      ]);
+      if (!tplRes.ok) { statusEl.textContent = 'Could not load the certificate layout.'; return; }
+      if (!dataRes.ok) { statusEl.textContent = (dataRes.body && dataRes.body.detail) || 'Could not load this record.'; return; }
+      TEMPLATE = tplRes.body;
+      FIELDS = dataRes.body.fields || {};
+      statusEl.textContent = '';
+      renderAll();
+    } catch (e) {
+      statusEl.textContent = 'Could not reach the server.';
+    }
+  }
+
+  // ---------------------------------------------------------------- Design mode
+  const boxToolbar = document.getElementById('ppv-box-toolbar');
+  const fontSizeLabel = document.getElementById('ppv-font-size');
+  const fontBoldCheck = document.getElementById('ppv-font-bold');
+  const fontFamilySelect = document.getElementById('ppv-font-family');
+
+  function findBox(id) { return (TEMPLATE.boxes || []).find(function (b) { return b.id === id; }); }
+
+  // Re-renders one box's text in place (after a font/size/bold/text change)
+  // without losing its resize handle -- every Design-mode edit funnels
+  // through this so the handle never has to be re-added by hand.
+  function refreshBoxDom(box, el) {
+    el.innerHTML = renderBoxText(box);
+    const handle = document.createElement('div');
+    handle.className = 'ppv-resize-handle';
+    el.appendChild(handle);
+  }
+
+  function positionBoxToolbar(el) {
+    const r = el.getBoundingClientRect();
+    boxToolbar.style.left = (r.left + window.scrollX) + 'px';
+    boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
+  }
+
+  function selectBox(el) {
+    if (SELECTED_BOX) SELECTED_BOX.classList.remove('selected');
+    SELECTED_BOX = el;
+    document.getElementById('ppv-delete-box').classList.toggle('hidden', !el || !DESIGN_ON);
+    if (!el) { boxToolbar.classList.add('hidden'); return; }
+    el.classList.add('selected');
+    const box = findBox(el.dataset.id);
+    const firstRun = box.paragraphs[0] && box.paragraphs[0].runs.find(function (r) { return r.type !== 'br'; });
+    fontSizeLabel.textContent = (firstRun && firstRun.size) || 10;
+    fontBoldCheck.checked = !!(firstRun && firstRun.bold);
+    fontFamilySelect.value = (firstRun && firstRun.font) || 'Helvetica';
+    positionBoxToolbar(el);
+    boxToolbar.classList.remove('hidden');
+  }
+
+  function adjustFont(delta) {
+    if (!SELECTED_BOX) return;
+    const box = findBox(SELECTED_BOX.dataset.id);
+    box.paragraphs.forEach(function (p) {
+      p.runs.forEach(function (r) {
+        if (r.type === 'br') return;
+        r.size = Math.max(6, Math.min(48, (r.size || 10) + delta));
+      });
+    });
+    const firstRun = box.paragraphs[0] && box.paragraphs[0].runs.find(function (r) { return r.type !== 'br'; });
+    fontSizeLabel.textContent = (firstRun && firstRun.size) || 10;
+    refreshBoxDom(box, SELECTED_BOX);
+  }
+
+  document.getElementById('ppv-font-minus').addEventListener('click', function () { adjustFont(-1); });
+  document.getElementById('ppv-font-plus').addEventListener('click', function () { adjustFont(1); });
+  fontBoldCheck.addEventListener('change', function () {
+    if (!SELECTED_BOX) return;
+    const box = findBox(SELECTED_BOX.dataset.id);
+    const bold = fontBoldCheck.checked;
+    box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type !== 'br') r.bold = bold; }); });
+    refreshBoxDom(box, SELECTED_BOX);
+  });
+  fontFamilySelect.addEventListener('change', function () {
+    if (!SELECTED_BOX) return;
+    const box = findBox(SELECTED_BOX.dataset.id);
+    const font = fontFamilySelect.value;
+    box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type !== 'br') r.font = font; }); });
+    refreshBoxDom(box, SELECTED_BOX);
+  });
+
+  // ---- Insert Text Box / Delete Box -- a fully custom box, not tied to
+  // any database field, for adding notes/labels the original certificate
+  // didn't have (a signature line, a stamp note, anything).
+  let nextCustomId = 1;
+  document.getElementById('ppv-add-text').addEventListener('click', function () {
+    const box = {
+      id: 'custom' + Date.now() + '_' + (nextCustomId++),
+      x: 250, y: 380, w: 150, h: 24,
+      paragraphs: [{ align: 'left', runs: [{ type: 'text', text: 'New text', bold: false, size: 10, font: 'Helvetica' }] }],
+    };
+    TEMPLATE.boxes.push(box);
+    renderAll();
+    const el = pageEl.querySelector('.ppv-box[data-id="' + box.id + '"]');
+    if (el) selectBox(el);
+  });
+  document.getElementById('ppv-delete-box').addEventListener('click', function () {
+    if (!SELECTED_BOX) return;
+    if (!confirm('Delete this text box?')) return;
+    const id = SELECTED_BOX.dataset.id;
+    TEMPLATE.boxes = TEMPLATE.boxes.filter(function (b) { return b.id !== id; });
+    selectBox(null);
+    renderAll();
+  });
+
+  // ---- inline text editing: double-click a box in Design mode to type
+  // directly into it. Collapses the box down to one paragraph/one run on
+  // save (keeping the first run's font/size/bold) -- simpler than trying
+  // to preserve multi-style mixed-formatting through a contenteditable box.
+  pageEl.addEventListener('dblclick', function (evt) {
+    if (!DESIGN_ON) return;
+    const boxEl = evt.target.closest('.ppv-box');
+    if (!boxEl) return;
+    const box = findBox(boxEl.dataset.id);
+    selectBox(boxEl);
+    const firstRun = box.paragraphs[0] && box.paragraphs[0].runs.find(function (r) { return r.type !== 'br'; }) || {};
+    const plainText = box.paragraphs.map(function (p) {
+      return p.runs.map(function (r) {
+        return r.type === 'field' ? ('{' + r.field + '}') : (r.text || '');
+      }).join('');
+    }).join('\n');
+    boxEl.contentEditable = 'true';
+    boxEl.textContent = plainText;
+    boxEl.focus();
+    document.execCommand('selectAll', false, null);
+
+    function finishEdit() {
+      boxEl.contentEditable = 'false';
+      const newText = boxEl.textContent;
+      box.paragraphs = [{
+        align: (box.paragraphs[0] && box.paragraphs[0].align) || 'left',
+        runs: [{ type: 'text', text: newText, bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' }],
+      }];
+      refreshBoxDom(box, boxEl);
+      boxEl.removeEventListener('blur', finishEdit);
+    }
+    boxEl.addEventListener('blur', finishEdit);
+  });
+
+  let drag = null;   // { mode: 'move'|'resize', boxEl, box, startX, startY, startLeft, startTop, startW, startH }
+
+  pageEl.addEventListener('mousedown', function (evt) {
+    if (!DESIGN_ON) return;
+    const boxEl = evt.target.closest('.ppv-box');
+    if (!boxEl) { selectBox(null); return; }
+    if (boxEl.contentEditable === 'true') return;  // currently being typed into -- let the click place the cursor, don't start a drag
+    selectBox(boxEl);
+    const box = findBox(boxEl.dataset.id);
+    const isHandle = evt.target.classList.contains('ppv-resize-handle');
+    drag = {
+      mode: isHandle ? 'resize' : 'move', boxEl: boxEl, box: box,
+      startX: evt.clientX, startY: evt.clientY,
+      startLeft: box.x, startTop: box.y, startW: box.w, startH: box.h,
+    };
+    evt.preventDefault();
+  });
+  document.addEventListener('mousemove', function (evt) {
+    if (!drag) return;
+    // page is laid out in pt; screen px -> pt at 96dpi/72pt-per-inch = *0.75
+    const dx = (evt.clientX - drag.startX) * 0.75;
+    const dy = (evt.clientY - drag.startY) * 0.75;
+    if (drag.mode === 'move') {
+      drag.box.x = Math.max(0, drag.startLeft + dx);
+      drag.box.y = Math.max(0, drag.startTop + dy);
+      drag.boxEl.style.left = drag.box.x + 'pt';
+      drag.boxEl.style.top = drag.box.y + 'pt';
+    } else {
+      drag.box.w = Math.max(10, drag.startW + dx);
+      drag.box.h = Math.max(10, drag.startH + dy);
+      drag.boxEl.style.width = drag.box.w + 'pt';
+      drag.boxEl.style.height = drag.box.h + 'pt';
+    }
+    if (SELECTED_BOX === drag.boxEl) {
+      const r = drag.boxEl.getBoundingClientRect();
+      boxToolbar.style.left = (r.left + window.scrollX) + 'px';
+      boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
+    }
+  });
+  document.addEventListener('mouseup', function () { drag = null; });
+
+  document.getElementById('ppv-design-toggle').addEventListener('click', function (evt) {
+    DESIGN_ON = !DESIGN_ON;
+    pageEl.classList.toggle('design-on', DESIGN_ON);
+    evt.currentTarget.textContent = 'Design Mode: ' + (DESIGN_ON ? 'On' : 'Off');
+    document.getElementById('ppv-save').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-reset').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-add-text').classList.toggle('hidden', !DESIGN_ON);
+    if (!DESIGN_ON) selectBox(null);
+  });
+
+  document.getElementById('ppv-save').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      try {
+        const r = await window.ntcFetchJSON('/api/print-template', { method: 'PUT', body: JSON.stringify(TEMPLATE) });
+        if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not save the layout.', true); return; }
+        window.ntcToast('Layout saved — this is now what everyone sees and prints.');
+      } catch (e) { window.ntcToast('Could not reach the server.', true); }
+    });
+  });
+
+  document.getElementById('ppv-reset').addEventListener('click', function (evt) {
+    if (!confirm('Reset the certificate layout back to the original design? Any positions/sizes you\'ve changed will be lost unless you\'ve already saved and want to keep them.')) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      try {
+        const r = await window.ntcFetchJSON('/api/print-template/default');
+        if (!r.ok) { window.ntcToast('Could not load the default layout.', true); return; }
+        TEMPLATE = r.body;
+        selectBox(null);
+        renderAll();
+        window.ntcToast('Layout reset. Click "Save Layout" to make this permanent.');
+      } catch (e) { window.ntcToast('Could not reach the server.', true); }
+    });
+  });
+
+  document.getElementById('ppv-print').addEventListener('click', function () { window.print(); });
+
+  document.getElementById('ppv-pdf').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      try {
+        const res = await window.ntcFetch('/api/print-pdf/' + LIC_ID, { headers: {} });
+        if (!res.ok) {
+          let detail = 'Could not generate the PDF.';
+          try { const b = await res.json(); detail = b.detail || detail; } catch (e2) {}
+          window.ntcToast(detail, true);
+          return;
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'License_{{ license_no or lic_id }}.pdf'.replace(/[\\/:*?"<>|]/g, '_');
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (e) {
+        window.ntcToast('Could not reach the server.', true);
+      }
+    });
+  });
+
+  loadEverything();
+})();
+</script>
+{% endblock %}

@@ -143,8 +143,22 @@ FORM_SECTIONS = [
     ("Radio / Technical", [
         ("class_of_station", "Class of Station"), ("nature_of_service", "Nature of Service"),
         ("callsign", "Callsign"), ("hours", "Hours"), ("tech", "Technology"),
-        ("freq1", "Frequency 1"), ("freq2", "Frequency 2"), ("power", "Power"),
-        ("capacity", "Capacity"),
+        ("freq1", "Frequency 1"), ("freq2", "Frequency 2"), ("freq3", "Frequency 3"),
+        ("freq4", "Frequency 4"), ("freq_range", "Frequency Range"), ("pol", "Polarization"),
+        ("bw_emission", "BW & Emission"), ("power", "Power"), ("capacity", "Capacity"),
+        ("points_of_comm", "Points of Communication"), ("config", "Config/Channel"),
+        ("total", "Total"),
+    ]),
+    # Antenna details -- were missing from this form even though the RSL
+    # certificate (see the Live/Print Preview) shows them; restored here so
+    # they're editable, not just display-only on the certificate.
+    ("Antenna", [
+        ("directive", "Directive"), ("hag", "HAG"), ("gain", "Gain"), ("type", "Type"),
+    ]),
+    ("Equipment", [
+        ("make_model", "Make Type & Model"), ("serial_no", "Serial No."),
+        ("new_form_no", "New Form No."), ("old_form_no", "Old Form No."),
+        ("old_date", "Old Date"),
     ]),
     ("Validity / OR", [
         ("validity_from", "Validity From"), ("validity_to", "Validity To"),
@@ -152,7 +166,9 @@ FORM_SECTIONS = [
     ]),
     ("Misc", [
         ("license_status", "License Status"), ("case_number", "Case Number"),
-        ("other_remarks", "Other Remarks"),
+        ("other_remarks", "Other Remarks"), ("other_reference", "Other Reference"),
+        ("dst", "DST"), ("signatory", "Signatory"), ("designation", "Designation"),
+        ("processor", "Processor"),
     ]),
 ]
 
@@ -174,6 +190,20 @@ def app_license_detail(request: Request, lic_id: int, _user=Depends(require_logi
     return templates.TemplateResponse(
         request, "app/license_form.html",
         {"sections": FORM_SECTIONS, "license": license_dict, "lic_id": lic_id},
+    )
+
+
+@router.get("/app/licenses/{lic_id}/print-preview")
+def app_license_print_preview(request: Request, lic_id: int, _user=Depends(require_login), db: Session = Depends(get_db)):
+    """The built-in Live Preview / Design mode / PDF export page -- see
+    app/legacy/print_builtin.py. Purely additive next to the existing
+    Excel/Word print flow (app/routers/print.py), not a replacement."""
+    row = db.get(License, lic_id)
+    if not row or row.deleted_at:
+        raise HTTPException(404, "License not found")
+    return templates.TemplateResponse(
+        request, "app/print_preview.html",
+        {"lic_id": lic_id, "license_no": row.license_no, "licensee": row.licensee},
     )
 
 

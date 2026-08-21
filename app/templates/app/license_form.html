@@ -11,6 +11,9 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+<div class="xl:col-span-2 min-w-0">
+
 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
   <!-- ============================== TOOLBAR (Record / Print) ============================== -->
   <div class="flex items-center gap-2">
@@ -53,6 +56,11 @@
                 title="Open the filled-in file for viewing/editing (no print/preview)">
           <span>Open File</span><span class="text-xs text-gray-400">Ctrl+O</span>
         </button>
+        <div class="h-px bg-gray-100 my-1"></div>
+        <a href="/app/licenses/{{ lic_id }}/print-preview" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between"
+           title="View and print this certificate right here in the app — no Excel or Word needed. You can also drag fields to reposition them and export a PDF.">
+          <span>Live Preview <span class="text-[10px] text-brand-600 font-semibold">(Built-in)</span></span>
+        </a>
         <div class="h-px bg-gray-100 my-1"></div>
         <div class="px-4 pt-1 pb-1.5 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Template</div>
         <div class="px-4 pb-2 flex gap-2">
@@ -186,6 +194,41 @@
   <div class="p-4" id="history-body"></div>
 </div>
 {% endif %}
+
+</div><!-- /xl:col-span-2 -->
+
+<!-- ============================== LIVE CERTIFICATE PREVIEW ============================== -->
+<!-- Same layout/fields as the full Live Preview page (/app/licenses/{id}/print-preview,
+     see app/legacy/print_builtin.py), but scaled down and rebuilt from whatever is
+     currently typed into the form -- updates as you type, no need to save first
+     to see how it'll look. Printing, Design mode, and PDF export still happen on
+     the full page (linked below) since those need a saved record. -->
+<div class="xl:col-span-1 xl:sticky xl:top-4">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-purple-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Live Certificate Preview</h2>
+      {% if lic_id %}
+      <a href="/app/licenses/{{ lic_id }}/print-preview" class="text-xs font-medium text-brand-600 hover:underline whitespace-nowrap">Full / Print / PDF &rarr;</a>
+      {% endif %}
+    </div>
+    <div class="p-3">
+      <p class="text-[11px] text-gray-400 mb-2">
+        Updates live as you type.
+        {% if not lic_id %}Save this record first to print it or export a PDF.{% endif %}
+      </p>
+      <p id="lp-status" class="text-xs text-gray-400 mb-2"></p>
+      <div id="lp-wrap" style="width:100%;overflow:hidden;">
+        <div id="lp-scale" style="transform-origin:top left;">
+          <div id="lp-page" class="relative bg-white border border-gray-200" style="width:612pt;height:792pt;">
+            <img id="lp-stamp" class="absolute pointer-events-none" style="display:none;" alt="">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /grid -->
 
 <script>
 const LIC_ID = {{ lic_id if lic_id else 'null' }};
@@ -327,6 +370,120 @@ const statusBox = document.getElementById('form-status');
   });
 
   initPinMap();
+})();
+
+// ============================== LIVE CERTIFICATE PREVIEW ==============================
+// Renders the same certificate layout as the full Live Preview page
+// (app/templates/app/print_preview.html / app/legacy/print_builtin.py),
+// but reads its field values straight out of the form's own inputs instead
+// of fetching a saved record -- so it updates as you type, before you've
+// even hit Save. Printing / Design mode / PDF export still happen on the
+// full page (linked above) since those work off the saved database record.
+(function () {
+  const pageEl = document.getElementById('lp-page');
+  const wrapEl = document.getElementById('lp-wrap');
+  const scaleEl = document.getElementById('lp-scale');
+  const statusEl = document.getElementById('lp-status');
+  if (!pageEl) return;
+
+  let TEMPLATE = null;
+  const DATE_FIELDS = { rsl_date: 1, old_date: 1, validity_from: 1, validity_to: 1, or_date: 1 };
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function formatDate(v) {
+    if (!v) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+    if (!m) return v;
+    return MONTHS[(+m[2]) - 1] + ' ' + (+m[3]) + ', ' + (+m[1]);
+  }
+
+  function collectFields() {
+    const out = {};
+    document.querySelectorAll('#license-form [id^="f_"]').forEach(function (el) {
+      const field = el.id.slice(2);
+      let v = el.value || '';
+      if (DATE_FIELDS[field]) v = formatDate(v);
+      out[field] = v;
+    });
+    return out;
+  }
+
+  function alignToCss(a) { return a === 'center' ? 'center' : a === 'right' ? 'right' : 'left'; }
+
+  function cssFontFamily(font) {
+    if (font === 'Times-Roman') return "'Times New Roman', Times, serif";
+    if (font === 'Courier') return "'Courier New', Courier, monospace";
+    return "Arial, Helvetica, sans-serif";
+  }
+
+  function renderBoxText(box, fields) {
+    return box.paragraphs.map(function (p) {
+      const spans = p.runs.map(function (r) {
+        if (r.type === 'br') return '<br>';
+        const text = r.type === 'field' ? (fields[r.field] || '') : (r.text || '');
+        const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
+          ';font-family:' + cssFontFamily(r.font) + ';';
+        return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';
+      }).join('');
+      return '<p style="text-align:' + alignToCss(p.align) + ';margin:0;white-space:pre-wrap;word-break:break-word;">' + spans + '</p>';
+    }).join('');
+  }
+
+  function renderAll() {
+    if (!TEMPLATE) return;
+    const fields = collectFields();
+    pageEl.querySelectorAll('.lp-box').forEach(function (el) { el.remove(); });
+    (TEMPLATE.boxes || []).forEach(function (box) {
+      const el = document.createElement('div');
+      el.className = 'lp-box';
+      el.style.position = 'absolute';
+      el.style.left = box.x + 'pt';
+      el.style.top = box.y + 'pt';
+      el.style.width = box.w + 'pt';
+      el.style.height = box.h + 'pt';
+      el.innerHTML = renderBoxText(box, fields);
+      pageEl.appendChild(el);
+    });
+    const img = document.getElementById('lp-stamp');
+    if (TEMPLATE.image && TEMPLATE.image.data) {
+      img.src = TEMPLATE.image.data;
+      img.style.left = TEMPLATE.image.x + 'pt';
+      img.style.top = TEMPLATE.image.y + 'pt';
+      img.style.width = TEMPLATE.image.w + 'pt';
+      img.style.height = TEMPLATE.image.h + 'pt';
+      img.style.display = '';
+    }
+  }
+
+  function fitPreview() {
+    const pagePxWidth = 612 * (96 / 72);
+    const pagePxHeight = 792 * (96 / 72);
+    const factor = wrapEl.clientWidth / pagePxWidth;
+    scaleEl.style.transform = 'scale(' + factor + ')';
+    wrapEl.style.height = Math.round(pagePxHeight * factor) + 'px';
+  }
+  window.addEventListener('resize', function () { fitPreview(); });
+
+  let debounceTimer = null;
+  function scheduleRender() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(renderAll, 150);
+  }
+  document.getElementById('license-form').addEventListener('input', scheduleRender);
+
+  window.ntcFetchJSON('/api/print-template').then(function (r) {
+    if (!r.ok) {
+      statusEl.textContent = r.status === 403
+        ? 'You don\'t have permission to use the print preview.'
+        : 'Could not load the certificate layout.';
+      return;
+    }
+    TEMPLATE = r.body;
+    fitPreview();
+    renderAll();
+  }).catch(function () {
+    statusEl.textContent = 'Could not reach the server.';
+  });
 })();
 
 function showStatus(msg, isError) {

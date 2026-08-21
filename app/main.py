@@ -32,7 +32,7 @@ import app.models  # noqa: F401
 
 from app.routers import (
     auth, users, meta, licenses_ro, licenses, analytics, import_, scan,
-    print as print_router, trash, settings, pages,
+    print as print_router, print_design, trash, settings, pages,
 )
 
 app = FastAPI(title="NTC R02 Telco Database", version="2.0")
@@ -88,6 +88,7 @@ app.include_router(analytics.router)
 app.include_router(import_.router)
 app.include_router(scan.router)
 app.include_router(print_router.router)
+app.include_router(print_design.router)
 app.include_router(trash.router)
 app.include_router(settings.router)
 
