@@ -154,8 +154,14 @@ def setup_admin(data: dict = Body(...)):
     password = data.get("password") or ""
     if not username:
         raise HTTPException(400, "Username is required")
-    if len(password) < 4:
-        raise HTTPException(400, "Password must be at least 4 characters")
+    # This is the Super Admin account -- full access to every license record,
+    # every other account, and the ability to wipe all data -- so it gets
+    # the strongest password floor in the app (8 chars vs. 4 for regular
+    # accounts, see app/routers/users.py). Still no rules on the exact mix
+    # of characters, both to keep it simple and because length matters more
+    # than complexity for real-world password strength.
+    if len(password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters (this account has full access to everything)")
 
     salt = secrets.token_bytes(16)
     pwhash = hash_pw(password, salt)

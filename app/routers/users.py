@@ -104,8 +104,13 @@ def add_user(data: dict = Body(...), request: Request = None):
         # Editing an existing account: password and PIN are each optional —
         # leave either blank to keep it unchanged. Role and permissions
         # always update to whatever was submitted.
-        if password and len(password) < 4:
-            raise HTTPException(400, "Password must be at least 4 characters (or leave blank to keep it unchanged)")
+        # 8-character floor (not 4) since these accounts can touch real
+        # licensing data and, for a Super Admin, every other account too.
+        # No character-mix rule, deliberately -- length is what actually
+        # matters, and a rule like "must include a symbol" just pushes
+        # people toward "Password1!" instead of a longer passphrase.
+        if password and len(password) < 8:
+            raise HTTPException(400, "Password must be at least 8 characters (or leave blank to keep it unchanged)")
         sets, params = ["role=?"], [role]
         if perms_json is not None:
             sets += ["permissions=?"]; params += [perms_json]
@@ -153,9 +158,9 @@ def add_user(data: dict = Body(...), request: Request = None):
         detail = f"Account '{username}' updated" + ((" — " + "; ".join(change_bits)) if change_bits else " (no changes)")
         log_activity(request, "user_management", detail=detail)
     else:
-        if len(password) < 4:
+        if len(password) < 8:
             conn.close()
-            raise HTTPException(400, "Password must be at least 4 characters")
+            raise HTTPException(400, "Password must be at least 8 characters")
         salt = secrets.token_bytes(16)
         pwhash = hash_pw(password, salt)
         pin_salt = secrets.token_bytes(16) if pin else None

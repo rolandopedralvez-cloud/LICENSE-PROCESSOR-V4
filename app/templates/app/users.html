@@ -40,7 +40,7 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Password <span id="uf-pw-note" class="text-gray-400"></span></label>
-            <input id="uf-password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <input id="uf-password" type="password" placeholder="At least 8 characters" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">PIN (4 digits, optional)</label>
@@ -225,7 +225,8 @@ document.getElementById('btn-save-user').addEventListener('click', function (evt
   const password = document.getElementById('uf-password').value;
   const pin = document.getElementById('uf-pin').value.trim();
   if (!username) { window.ntcToast('Username is required.', true); return; }
-  if (!editing && password.length < 4) { window.ntcToast('Password must be at least 4 characters.', true); return; }
+  if (!editing && password.length < 8) { window.ntcToast('Password must be at least 8 characters.', true); return; }
+  if (editing && password && password.length < 8) { window.ntcToast('Password must be at least 8 characters (or leave blank to keep it unchanged).', true); return; }
   if (pin && !/^\d{4}$/.test(pin)) { window.ntcToast('PIN must be exactly 4 digits, or left blank.', true); return; }
   const perms = Array.from(document.querySelectorAll('.uf-perm-cb:checked')).map(function (cb) { return cb.value; });
   const payload = { username: username, role: role, permissions: perms };
