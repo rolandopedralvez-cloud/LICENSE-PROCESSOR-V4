@@ -51,6 +51,10 @@
     </button>
 
     {% if lic_id %}
+    <button type="button" id="btn-save-as-new"
+            class="bg-white border border-brand-300 text-brand-600 hover:bg-brand-50 rounded-md px-5 py-2 text-sm transition-colors">
+      Save as New (keep this one, create a copy)
+    </button>
     <button type="button" id="btn-delete"
             class="bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-md px-5 py-2 text-sm transition-colors">
       Delete (move to Trash)
@@ -166,6 +170,26 @@ document.getElementById('license-form').addEventListener('submit', function (e) 
 });
 
 {% if lic_id %}
+// "Save as New" — mirrors the classic UI's Record ▾ → Save as New: keeps the
+// record currently on screen untouched, and creates a brand-new record with
+// whatever is in the form right now (including any unsaved edits). The new
+// record remembers which one it was copied from (renewed_from) so it shows
+// up in that original record's Renewal History.
+document.getElementById('btn-save-as-new').addEventListener('click', function (evt) {
+  const data = Object.fromEntries(new FormData(document.getElementById('license-form')).entries());
+  data.renewed_from = LIC_ID;
+  if (!confirm('Create a NEW record with these details? The record you\'re currently viewing (#{{ lic_id }}) will be left as-is.')) return;
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/licenses', { method: 'POST', body: JSON.stringify(data) });
+      if (!r.ok) { showStatus((r.body && r.body.detail) || 'Save as New failed. Nothing was created.', true); return; }
+      window.location.href = '/app/licenses/' + r.body.id;
+    } catch (err) {
+      showStatus('Could not reach the server — nothing was created.', true);
+    }
+  });
+});
+
 document.getElementById('btn-delete').addEventListener('click', function (evt) {
   if (!confirm('Move this record to Trash? It can be restored later from Trash (in the sidebar).')) return;
   window.ntcBusy(evt.currentTarget, async function () {
