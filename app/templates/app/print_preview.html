@@ -258,6 +258,20 @@
     if (!boxEl) return;
     const box = findBox(boxEl.dataset.id);
     selectBox(boxEl);
+
+    // Boxes that pull from a database field (e.g. BW & Emission, Capacity)
+    // can't be typed over directly -- doing so used to freeze the live field
+    // into permanent literal text like "{bw_emission}", silently breaking
+    // that field on every future record. Font/size/bold and drag/resize
+    // still work on these boxes; only free-typing is blocked. Boxes with no
+    // field runs (including any "+ Insert Text Box" box) can still be
+    // double-clicked and edited normally.
+    const hasField = box.paragraphs.some(function (p) { return p.runs.some(function (r) { return r.type === 'field'; }); });
+    if (hasField) {
+      window.ntcToast('This box shows a database field (like BW & Emission or Capacity) -- its text can\'t be typed over, or the live field would be lost. Use the font/size/bold controls above, or drag/resize instead.', true);
+      return;
+    }
+
     const firstRun = box.paragraphs[0] && box.paragraphs[0].runs.find(function (r) { return r.type !== 'br'; }) || {};
     const plainText = box.paragraphs.map(function (p) {
       return p.runs.map(function (r) {
