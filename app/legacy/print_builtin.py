@@ -22,6 +22,7 @@ How it works:
 """
 import os
 import io
+import re
 import json
 import base64
 import datetime
@@ -155,9 +156,15 @@ def build_pdf(lic_id):
             pass  # a broken/missing stamp image should never block the whole PDF
 
     ALIGN = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT}
+    _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
     for box in tpl.get("boxes", []):
         cursor_y_top = page_h - box["y"]  # reportlab's origin is bottom-left; the template's is top-left
+        # Line spacing -- how far apart wrapped/stacked lines sit, e.g.
+        # compressed for a box packed with many frequency lines. 1.2 (20%
+        # extra breathing room over the font size) is the same default
+        # every box used before this was configurable.
+        leading_mult = box.get("leading") or 1.2
         for para in box.get("paragraphs", []):
             markup_parts = []
             base_size = 10
@@ -178,12 +185,14 @@ def build_pdf(lic_id):
                 escaped = saxutils.escape(text)
                 if run.get("bold"):
                     escaped = f"<b>{escaped}</b>"
-                markup_parts.append(f'<font face="{base_font}" size="{run.get("size", base_size)}">{escaped}</font>')
+                color = run.get("color")
+                color_attr = f' color="{color}"' if color and _HEX_RE.match(color) else ""
+                markup_parts.append(f'<font face="{base_font}" size="{run.get("size", base_size)}"{color_attr}>{escaped}</font>')
             markup = "".join(markup_parts)
             if not markup.strip():
                 continue
             style = ParagraphStyle(
-                "box", fontName=base_font, fontSize=base_size, leading=base_size * 1.2,
+                "box", fontName=base_font, fontSize=base_size, leading=base_size * leading_mult,
                 alignment=ALIGN.get(para.get("align", "left"), TA_LEFT),
             )
             p = Paragraph(markup, style)

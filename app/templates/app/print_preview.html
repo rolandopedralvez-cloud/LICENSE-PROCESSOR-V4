@@ -17,6 +17,26 @@
     <span class="text-sm text-gray-500 hidden sm:inline mr-auto">{{ license_no or '' }} &middot; {{ licensee or '' }}</span>
 
     <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Design Mode: Off</button>
+
+    <select id="ppv-box-picker" class="hidden text-xs border border-gray-300 rounded-md px-1.5 py-1.5 max-w-[170px]">
+      <option value="">Jump to box&hellip;</option>
+    </select>
+
+    <div id="ppv-page-size" class="hidden flex items-center gap-1 text-xs border-l border-gray-200 pl-2">
+      <span class="text-gray-500">Paper:</span>
+      <select id="ppv-page-preset" class="border border-gray-300 rounded px-1 py-1.5 text-xs">
+        <option value="612x792">Short / Letter (8.5&times;11)</option>
+        <option value="612x936">Long / Folio (8.5&times;13)</option>
+        <option value="612x1008">Legal (8.5&times;14)</option>
+        <option value="595x842">A4 (8.27&times;11.69)</option>
+        <option value="custom">Custom&hellip;</option>
+      </select>
+      <input id="ppv-page-w" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded px-1 py-1.5 text-xs" placeholder="W in">
+      <span id="ppv-page-x" class="hidden text-gray-400">&times;</span>
+      <input id="ppv-page-h" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded px-1 py-1.5 text-xs" placeholder="H in">
+      <button id="ppv-page-apply" class="border border-gray-300 rounded px-2 py-1.5 text-xs hover:bg-gray-50">Apply</button>
+    </div>
+
     <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">+ Insert Text Box</button>
     <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Delete Box</button>
     <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-300 text-amber-700 rounded-md px-3 py-1.5 hover:bg-amber-50">Reset to Default</button>
@@ -40,6 +60,15 @@
     <label class="flex items-center gap-1 ml-1">
       <input type="checkbox" id="ppv-font-bold"> Bold
     </label>
+    <span class="text-gray-300 ml-1">Spacing</span>
+    <button id="ppv-lh-minus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">&minus;</button>
+    <span id="ppv-lh-label" class="w-7 text-center">1.2</span>
+    <button id="ppv-lh-plus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">+</button>
+    <label class="flex items-center gap-1 ml-1" title="Text color">
+      <input type="color" id="ppv-font-color" value="#000000" class="w-6 h-5 rounded border-none bg-transparent p-0">
+    </label>
+    <button id="ppv-font-hide" class="text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Turns the text white so it's invisible on this printout">Hide (white)</button>
+    <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Back to black text">Unhide</button>
     <span class="text-gray-400 ml-1">(double-click text to edit)</span>
   </div>
 
@@ -59,7 +88,9 @@
     #ppv-page { position: absolute; top: 0; left: 0; margin: 0; box-shadow: none; }
     .no-print { display: none !important; }
   }
-  @page { size: letter; margin: 0; }
+  /* @page size is set dynamically in JS (applyPageSize()) from the
+     template's paper size, so a custom bond paper size actually takes
+     effect when printing -- see #ppv-page-css below. */
   .ppv-box { position: absolute; cursor: default; }
   .ppv-box p { margin: 0; white-space: pre-wrap; word-break: break-word; }
   #ppv-page.design-on .ppv-box { cursor: move; outline: 1px dashed transparent; }
@@ -97,19 +128,42 @@
   }
 
   function renderBoxText(box) {
+    // Line spacing -- how tightly stacked lines/paragraphs sit in this box
+    // (e.g. compressed when a box is packed with many frequency lines).
+    // 1.2 matches the old fixed spacing every box used before this was
+    // configurable, so untouched boxes look exactly the same as before.
+    const lineHeight = box.leading || 1.2;
     return box.paragraphs.map(function (p) {
       const spans = p.runs.map(function (r) {
         if (r.type === 'br') return '<br>';
         const text = r.type === 'field' ? (FIELDS[r.field] || '') : (r.text || '');
         const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
-          ';font-family:' + cssFontFamily(r.font) + ';';
+          ';font-family:' + cssFontFamily(r.font) + ';color:' + (r.color || '#000000') + ';';
         return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';
       }).join('');
-      return '<p style="text-align:' + alignToCss(p.align) + ';">' + spans + '</p>';
+      return '<p style="text-align:' + alignToCss(p.align) + ';line-height:' + lineHeight + ';">' + spans + '</p>';
     }).join('');
   }
 
+  function applyPageSize() {
+    const w = (TEMPLATE.page && TEMPLATE.page.width_pt) || 612;
+    const h = (TEMPLATE.page && TEMPLATE.page.height_pt) || 792;
+    pageEl.style.width = w + 'pt';
+    pageEl.style.height = h + 'pt';
+    // Browser "Print" needs a matching @page rule or it'll clip/pad against
+    // whatever paper size is selected in the OS print dialog by default --
+    // this keeps the printed page matching whatever size was set here.
+    let styleTag = document.getElementById('ppv-page-css');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'ppv-page-css';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = '@page { size: ' + (w / 72) + 'in ' + (h / 72) + 'in; margin: 0; }';
+  }
+
   function renderAll() {
+    applyPageSize();
     pageEl.querySelectorAll('.ppv-box').forEach(function (el) { el.remove(); });
     (TEMPLATE.boxes || []).forEach(function (box) {
       const el = document.createElement('div');
@@ -134,7 +188,41 @@
       img.style.height = TEMPLATE.image.h + 'pt';
       img.style.display = '';
     }
+    populateBoxPicker();
   }
+
+  // ---- "Jump to box" -- a few boxes on this certificate sit exactly on
+  // top of each other or are very small, so a direct click can't always
+  // reach them. This list reaches every box regardless, guaranteeing
+  // every box can be selected and edited.
+  function boxPreviewText(box) {
+    const words = box.paragraphs.map(function (p) {
+      return p.runs.map(function (r) {
+        if (r.type === 'br') return ' ';
+        if (r.type === 'field') return '{' + r.field + '}';
+        return r.text || '';
+      }).join('');
+    }).join(' ').replace(/\s+/g, ' ').trim();
+    return words ? (words.length > 28 ? words.slice(0, 28) + '…' : words) : '(empty box)';
+  }
+  function populateBoxPicker() {
+    const picker = document.getElementById('ppv-box-picker');
+    const current = picker.value;
+    picker.innerHTML = '<option value="">Jump to box&hellip;</option>' +
+      (TEMPLATE.boxes || []).map(function (box) {
+        return '<option value="' + window.ntcEsc(box.id) + '">' + window.ntcEsc(boxPreviewText(box)) + '</option>';
+      }).join('');
+    if (current) picker.value = current;
+  }
+  document.getElementById('ppv-box-picker').addEventListener('change', function (evt) {
+    const id = evt.target.value;
+    if (!id) return;
+    const el = pageEl.querySelector('.ppv-box[data-id="' + id + '"]');
+    if (el) {
+      selectBox(el);
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
 
   async function loadEverything() {
     statusEl.textContent = 'Loading…';
@@ -159,6 +247,10 @@
   const fontSizeLabel = document.getElementById('ppv-font-size');
   const fontBoldCheck = document.getElementById('ppv-font-bold');
   const fontFamilySelect = document.getElementById('ppv-font-family');
+  const lhLabel = document.getElementById('ppv-lh-label');
+  const fontColorInput = document.getElementById('ppv-font-color');
+  const hideBtn = document.getElementById('ppv-font-hide');
+  const unhideBtn = document.getElementById('ppv-font-unhide');
 
   function findBox(id) { return (TEMPLATE.boxes || []).find(function (b) { return b.id === id; }); }
 
@@ -189,6 +281,11 @@
     fontSizeLabel.textContent = (firstRun && firstRun.size) || 10;
     fontBoldCheck.checked = !!(firstRun && firstRun.bold);
     fontFamilySelect.value = (firstRun && firstRun.font) || 'Helvetica';
+    lhLabel.textContent = (box.leading || 1.2).toFixed(1);
+    const color = (firstRun && firstRun.color) || '#000000';
+    fontColorInput.value = color;
+    hideBtn.classList.toggle('hidden', color.toLowerCase() === '#ffffff');
+    unhideBtn.classList.toggle('hidden', color.toLowerCase() !== '#ffffff');
     positionBoxToolbar(el);
     boxToolbar.classList.remove('hidden');
   }
@@ -223,6 +320,34 @@
     box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type !== 'br') r.font = font; }); });
     refreshBoxDom(box, SELECTED_BOX);
   });
+
+  // ---- line spacing -- compresses/expands how far apart stacked lines
+  // sit in the selected box (handy for a box packed with many frequency
+  // lines that are currently too far apart).
+  function adjustLeading(delta) {
+    if (!SELECTED_BOX) return;
+    const box = findBox(SELECTED_BOX.dataset.id);
+    box.leading = Math.max(0.8, Math.min(3.0, Math.round(((box.leading || 1.2) + delta) * 10) / 10));
+    lhLabel.textContent = box.leading.toFixed(1);
+    refreshBoxDom(box, SELECTED_BOX);
+  }
+  document.getElementById('ppv-lh-minus').addEventListener('click', function () { adjustLeading(-0.1); });
+  document.getElementById('ppv-lh-plus').addEventListener('click', function () { adjustLeading(0.1); });
+
+  // ---- text color -- including making text white to hide it on this
+  // printout (e.g. a field you want kept in the layout but not shown).
+  function applyColor(hex) {
+    if (!SELECTED_BOX) return;
+    const box = findBox(SELECTED_BOX.dataset.id);
+    box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type !== 'br') r.color = hex; }); });
+    fontColorInput.value = hex;
+    hideBtn.classList.toggle('hidden', hex.toLowerCase() === '#ffffff');
+    unhideBtn.classList.toggle('hidden', hex.toLowerCase() !== '#ffffff');
+    refreshBoxDom(box, SELECTED_BOX);
+  }
+  fontColorInput.addEventListener('input', function () { applyColor(fontColorInput.value); });
+  hideBtn.addEventListener('click', function () { applyColor('#ffffff'); });
+  unhideBtn.addEventListener('click', function () { applyColor('#000000'); });
 
   // ---- Insert Text Box / Delete Box -- a fully custom box, not tied to
   // any database field, for adding notes/labels the original certificate
@@ -344,7 +469,60 @@
     document.getElementById('ppv-save').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-reset').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-add-text').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-box-picker').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-page-size').classList.toggle('hidden', !DESIGN_ON);
+    if (DESIGN_ON) syncPageSizeControls();
     if (!DESIGN_ON) selectBox(null);
+  });
+
+  // ---- paper size -- lets Design Mode target a different bond paper size
+  // than the default 8.5x11 (e.g. a longer form for a different license
+  // type). Saved as part of the template (Save Layout), and both the PDF
+  // export and browser Print pick it up automatically.
+  const pagePresetSelect = document.getElementById('ppv-page-preset');
+  const pageWInput = document.getElementById('ppv-page-w');
+  const pageHInput = document.getElementById('ppv-page-h');
+  const pageXLabel = document.getElementById('ppv-page-x');
+
+  function syncPageSizeControls() {
+    const w = (TEMPLATE.page && TEMPLATE.page.width_pt) || 612;
+    const h = (TEMPLATE.page && TEMPLATE.page.height_pt) || 792;
+    const match = Array.from(pagePresetSelect.options).find(function (o) { return o.value === (w + 'x' + h); });
+    if (match) {
+      pagePresetSelect.value = match.value;
+      pageWInput.classList.add('hidden'); pageXLabel.classList.add('hidden'); pageHInput.classList.add('hidden');
+    } else {
+      pagePresetSelect.value = 'custom';
+      pageWInput.classList.remove('hidden'); pageXLabel.classList.remove('hidden'); pageHInput.classList.remove('hidden');
+    }
+    pageWInput.value = (w / 72).toFixed(2);
+    pageHInput.value = (h / 72).toFixed(2);
+  }
+  pagePresetSelect.addEventListener('change', function () {
+    const isCustom = pagePresetSelect.value === 'custom';
+    pageWInput.classList.toggle('hidden', !isCustom);
+    pageXLabel.classList.toggle('hidden', !isCustom);
+    pageHInput.classList.toggle('hidden', !isCustom);
+    if (!isCustom) {
+      const parts = pagePresetSelect.value.split('x');
+      TEMPLATE.page = TEMPLATE.page || {};
+      TEMPLATE.page.width_pt = Number(parts[0]);
+      TEMPLATE.page.height_pt = Number(parts[1]);
+      pageWInput.value = (TEMPLATE.page.width_pt / 72).toFixed(2);
+      pageHInput.value = (TEMPLATE.page.height_pt / 72).toFixed(2);
+      renderAll();
+      window.ntcToast('Paper size updated. Click "Save Layout" to make this permanent.');
+    }
+  });
+  document.getElementById('ppv-page-apply').addEventListener('click', function () {
+    const wIn = parseFloat(pageWInput.value), hIn = parseFloat(pageHInput.value);
+    if (!(wIn > 0) || !(hIn > 0)) { window.ntcToast('Enter a valid width and height in inches.', true); return; }
+    TEMPLATE.page = TEMPLATE.page || {};
+    TEMPLATE.page.width_pt = Math.round(wIn * 72 * 100) / 100;
+    TEMPLATE.page.height_pt = Math.round(hIn * 72 * 100) / 100;
+    renderAll();
+    syncPageSizeControls();
+    window.ntcToast('Paper size updated. Click "Save Layout" to make this permanent.');
   });
 
   document.getElementById('ppv-save').addEventListener('click', function (evt) {
@@ -366,6 +544,7 @@
         TEMPLATE = r.body;
         selectBox(null);
         renderAll();
+        syncPageSizeControls();
         window.ntcToast('Layout reset. Click "Save Layout" to make this permanent.');
       } catch (e) { window.ntcToast('Could not reach the server.', true); }
     });

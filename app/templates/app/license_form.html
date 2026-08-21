@@ -417,20 +417,25 @@ const statusBox = document.getElementById('form-status');
   }
 
   function renderBoxText(box, fields) {
+    const lineHeight = box.leading || 1.2;
     return box.paragraphs.map(function (p) {
       const spans = p.runs.map(function (r) {
         if (r.type === 'br') return '<br>';
         const text = r.type === 'field' ? (fields[r.field] || '') : (r.text || '');
         const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
-          ';font-family:' + cssFontFamily(r.font) + ';';
+          ';font-family:' + cssFontFamily(r.font) + ';color:' + (r.color || '#000000') + ';';
         return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';
       }).join('');
-      return '<p style="text-align:' + alignToCss(p.align) + ';margin:0;white-space:pre-wrap;word-break:break-word;">' + spans + '</p>';
+      return '<p style="text-align:' + alignToCss(p.align) + ';margin:0;white-space:pre-wrap;word-break:break-word;line-height:' + lineHeight + ';">' + spans + '</p>';
     }).join('');
   }
 
   function renderAll() {
     if (!TEMPLATE) return;
+    const pw = (TEMPLATE.page && TEMPLATE.page.width_pt) || 612;
+    const ph = (TEMPLATE.page && TEMPLATE.page.height_pt) || 792;
+    pageEl.style.width = pw + 'pt';
+    pageEl.style.height = ph + 'pt';
     const fields = collectFields();
     pageEl.querySelectorAll('.lp-box').forEach(function (el) { el.remove(); });
     (TEMPLATE.boxes || []).forEach(function (box) {
@@ -456,8 +461,10 @@ const statusBox = document.getElementById('form-status');
   }
 
   function fitPreview() {
-    const pagePxWidth = 612 * (96 / 72);
-    const pagePxHeight = 792 * (96 / 72);
+    const pw = (TEMPLATE && TEMPLATE.page && TEMPLATE.page.width_pt) || 612;
+    const ph = (TEMPLATE && TEMPLATE.page && TEMPLATE.page.height_pt) || 792;
+    const pagePxWidth = pw * (96 / 72);
+    const pagePxHeight = ph * (96 / 72);
     const factor = wrapEl.clientWidth / pagePxWidth;
     scaleEl.style.transform = 'scale(' + factor + ')';
     wrapEl.style.height = Math.round(pagePxHeight * factor) + 'px';
