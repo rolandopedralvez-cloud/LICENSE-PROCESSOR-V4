@@ -4,6 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}NTC Licensing{% endblock %}</title>
+  <script>
+    // Apply the cached theme/font/size instantly, before first paint, so
+    // there's no flash of the wrong look. The authoritative copy lives on
+    // the account (users.theme/font_family/font_size in app/core.py) and
+    // reaches the browser via the login response's "prefs" field and
+    // GET /api/my-preferences -- this is just a same-device cache of the
+    // last known values so we don't wait on a network round-trip first.
+    (function () {
+      try {
+        var raw = localStorage.getItem('ntc_prefs');
+        var prefs = raw ? JSON.parse(raw) : null;
+        var root = document.documentElement;
+        root.dataset.theme = (prefs && prefs.theme) || 'light';
+        root.dataset.font = (prefs && prefs.font_family) || 'sans';
+        root.dataset.fontsize = (prefs && prefs.font_size) || 'md';
+      } catch (e) {}
+    })();
+  </script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -39,6 +57,49 @@
     .htmx-request.htmx-indicator,.htmx-request .htmx-indicator{opacity:1}
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-thumb{background:#c7c7d1;border-radius:4px}
+
+    /* ---- Account Preferences: font family / size (app/routers/settings.py,
+       /api/my-preferences) --------------------------------------------- */
+    :root { --ntc-font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; --ntc-font-size: 16px; }
+    :root[data-font="serif"] { --ntc-font-family: Georgia, Cambria, 'Times New Roman', Times, serif; }
+    :root[data-font="mono"] { --ntc-font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace; }
+    :root[data-fontsize="sm"] { --ntc-font-size: 14px; }
+    :root[data-fontsize="md"] { --ntc-font-size: 16px; }
+    :root[data-fontsize="lg"] { --ntc-font-size: 18px; }
+    :root[data-fontsize="xl"] { --ntc-font-size: 20px; }
+    html { font-size: var(--ntc-font-size); }
+    body { font-family: var(--ntc-font-family); }
+
+    /* ---- Account Preferences: dark theme ------------------------------
+       Tailwind is loaded via the CDN script with no dark: variant
+       configured, and templates use plain gray-scale utility classes
+       everywhere, so instead of a `dark:` retrofit of every template this
+       overrides the handful of gray/white utility classes actually in use
+       once data-theme="dark" is set on <html>. Covers the common
+       surfaces (page background, cards, text, borders, inputs, tables);
+       not pixel-perfect everywhere, but keeps the app comfortably usable
+       in low light. */
+    :root[data-theme="dark"] body { background-color: #0f1117; color: #e5e7eb; }
+    :root[data-theme="dark"] .bg-gray-100 { background-color: #0f1117 !important; }
+    :root[data-theme="dark"] .bg-white,
+    :root[data-theme="dark"] .bg-gray-50 { background-color: #1c1f2b !important; }
+    :root[data-theme="dark"] .text-gray-900,
+    :root[data-theme="dark"] .text-gray-800,
+    :root[data-theme="dark"] .text-gray-700 { color: #e5e7eb !important; }
+    :root[data-theme="dark"] .text-gray-600,
+    :root[data-theme="dark"] .text-gray-500,
+    :root[data-theme="dark"] .text-gray-400 { color: #9ca3af !important; }
+    :root[data-theme="dark"] .border-gray-100,
+    :root[data-theme="dark"] .border-gray-200,
+    :root[data-theme="dark"] .border-gray-300 { border-color: #2d3140 !important; }
+    :root[data-theme="dark"] input,
+    :root[data-theme="dark"] select,
+    :root[data-theme="dark"] textarea {
+      background-color: #1c1f2b !important; color: #e5e7eb !important; border-color: #2d3140 !important;
+    }
+    :root[data-theme="dark"] thead.bg-gray-50,
+    :root[data-theme="dark"] tr.hover\:bg-gray-50:hover { background-color: #23273a !important; }
+    :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3f4356; }
   </style>
   <script>
   // ---------------------------------------------------------------------
@@ -79,7 +140,30 @@
       localStorage.removeItem("ntc_role");
       localStorage.removeItem("ntc_user");
       localStorage.removeItem("ntc_perms");
+      localStorage.removeItem("ntc_prefs");
       window.location.href = "/app/login";
+    };
+
+    // Account Preferences (theme/font/display name/avatar) -- see
+    // /api/my-preferences in app/routers/settings.py. ntcPrefs() reads the
+    // same-device cache (kept in sync at login and by _shell.html's
+    // background refresh); ntcApplyPrefs() is the one place that both
+    // updates the cache and re-applies theme/font to the live page, used
+    // by the Account Preferences form on Settings for an instant preview
+    // and by _shell.html after fetching a fresh copy from the server.
+    window.ntcPrefs = function () {
+      try { return JSON.parse(localStorage.getItem("ntc_prefs") || "null") || {}; } catch (e) { return {}; }
+    };
+    window.ntcApplyPrefs = function (prefs) {
+      if (!prefs) return;
+      const root = document.documentElement;
+      if (prefs.theme) root.dataset.theme = prefs.theme;
+      if (prefs.font_family) root.dataset.font = prefs.font_family;
+      if (prefs.font_size) root.dataset.fontsize = prefs.font_size;
+      try {
+        const merged = Object.assign({}, window.ntcPrefs(), prefs);
+        localStorage.setItem("ntc_prefs", JSON.stringify(merged));
+      } catch (e) {}
     };
     // Redirect to login unless we already have a token. Call this at the
     // top of any /app/* page that requires a signed-in user (every page

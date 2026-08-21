@@ -122,6 +122,10 @@
       <h2 class="font-medium text-gray-700 text-sm">Results</h2>
     </div>
     <div class="flex items-center gap-2 text-xs">
+      <button id="btn-map-selected" disabled
+              class="font-medium text-sky-600 border border-sky-200 rounded-md px-3 py-1.5 hover:bg-sky-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+        Pin Selected to Map (<span id="map-sel-count">0</span>)
+      </button>
       <button id="btn-export-selected" disabled
               class="font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
         Export Selected (<span id="export-sel-count">0</span>)
@@ -133,6 +137,29 @@
     </div>
   </div>
   <div id="results" class="p-1">Loading&hellip;</div>
+</div>
+
+<!-- ============================== PIN-SELECTED-TO-MAP MODAL ============================== -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<div id="ntc-map-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+  <div class="bg-white rounded-md shadow-lg w-full max-w-4xl">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Pinned Stations</h2>
+      <button onclick="window.ntcCloseMapModal()" class="text-gray-400 hover:text-gray-700">&times;</button>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-400 mb-2">
+        Colored by carrier. Nearby stations group into a number bubble until you zoom in — click a bubble to expand, or a pin for details.
+      </p>
+      <div id="selected-map" class="rounded-md border border-gray-200" style="height:480px;"></div>
+      <div id="selected-map-label" class="text-xs text-gray-500 mt-2"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ============================== RECENTLY ADDED ============================== -->
@@ -197,17 +224,31 @@
   // directly) means selections keep working after every swap without
   // re-binding anything.
   let EXPORT_SEL = new Set(); // license id -> true
+  let SEL_INFO = new Map();   // license id -> {licensee, site, nlat_deg, ..., elong_sec} (from the checkbox's data-* attrs)
 
   function updateExportSelBar() {
     const btn = document.getElementById('btn-export-selected');
     document.getElementById('export-sel-count').textContent = EXPORT_SEL.size;
     btn.disabled = EXPORT_SEL.size === 0;
+    const mapBtn = document.getElementById('btn-map-selected');
+    document.getElementById('map-sel-count').textContent = EXPORT_SEL.size;
+    mapBtn.disabled = EXPORT_SEL.size === 0;
   }
 
   document.getElementById('results').addEventListener('change', function (e) {
     if (!e.target.classList.contains('ntc-row-select')) return;
     const id = Number(e.target.dataset.id);
-    if (e.target.checked) EXPORT_SEL.add(id); else EXPORT_SEL.delete(id);
+    if (e.target.checked) {
+      EXPORT_SEL.add(id);
+      SEL_INFO.set(id, {
+        licensee: e.target.dataset.licensee, site: e.target.dataset.site, lic: e.target.dataset.lic,
+        nlat_deg: e.target.dataset.nlatDeg, nlat_min: e.target.dataset.nlatMin, nlat_sec: e.target.dataset.nlatSec,
+        elong_deg: e.target.dataset.elongDeg, elong_min: e.target.dataset.elongMin, elong_sec: e.target.dataset.elongSec,
+      });
+    } else {
+      EXPORT_SEL.delete(id);
+      SEL_INFO.delete(id);
+    }
     updateExportSelBar();
   });
 
@@ -254,5 +295,84 @@
       document.getElementById('btn-export-selected').classList.add('hidden');
     }
   })();
+</script>
+
+<script>
+  // ---- Pin Selected to Map -------------------------------------------
+  // Mirrors the classic UI's "Pin Selected to Map": take whichever rows
+  // are checked (same checkboxes Export Selected uses) and drop them all
+  // on one map at once, colored by carrier, with nearby pins grouped into
+  // a cluster bubble so a busy area doesn't turn into an unreadable pile.
+  function dmsToDec(d, m, s) {
+    const dv = parseFloat(d) || 0, mv = parseFloat(m) || 0, sv = parseFloat(s) || 0;
+    return dv + mv / 60 + sv / 3600;
+  }
+  function carrierColor(licensee) {
+    const s = (licensee || '').toUpperCase();
+    if (s.includes('SMART')) return '#6FBF8B';
+    if (s.includes('GLOBE') || s.includes('INNOVE')) return '#6FA3D8';
+    if (s.includes('DIGITEL')) return '#E0C468';
+    if (s.includes('DITO')) return '#D98080';
+    return '#9AA5B1';
+  }
+  function carrierDivIcon(color) {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:' + color +
+            ';transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+      iconSize: [18, 18], iconAnchor: [9, 17], popupAnchor: [0, -16],
+    });
+  }
+
+  let selectedMap = null, selectedCluster = null;
+  window.ntcCloseMapModal = function () {
+    document.getElementById('ntc-map-modal').classList.add('hidden');
+  };
+
+  document.getElementById('btn-map-selected').addEventListener('click', function () {
+    const points = Array.from(SEL_INFO.entries()).map(function (entry) {
+      const id = entry[0], info = entry[1];
+      return {
+        id: id, license_no: info.lic, licensee: info.licensee, site: info.site,
+        lat: dmsToDec(info.nlat_deg, info.nlat_min, info.nlat_sec),
+        lng: dmsToDec(info.elong_deg, info.elong_min, info.elong_sec),
+      };
+    });
+    const valid = points.filter(function (p) { return p.lat > 0 && p.lng > 0; });
+
+    document.getElementById('ntc-map-modal').classList.remove('hidden');
+    const lbl = document.getElementById('selected-map-label');
+
+    if (!valid.length) {
+      lbl.textContent = 'None of the ' + points.length + ' selected record(s) have coordinates set — open each one and set its pin first.';
+      return;
+    }
+    lbl.textContent = valid.length + ' of ' + points.length + ' selected station(s) have coordinates and are pinned below.';
+
+    if (!selectedMap) {
+      selectedMap = L.map('selected-map', { zoomControl: true }).setView([16.9, 121.6], 7);
+      const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 19, attribution: '© OpenStreetMap' });
+      const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { maxZoom: 19, attribution: 'Esri World Imagery' });
+      streets.addTo(selectedMap);
+      L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(selectedMap);
+    }
+    if (selectedCluster) selectedMap.removeLayer(selectedCluster);
+    selectedCluster = L.markerClusterGroup();
+
+    valid.forEach(function (p) {
+      const m = L.marker([p.lat, p.lng], { icon: carrierDivIcon(carrierColor(p.licensee)) });
+      m.bindPopup(
+        '<b>' + window.ntcEsc(p.license_no || '') + '</b><br>' + window.ntcEsc(p.licensee || '') +
+        (p.site ? '<br>' + window.ntcEsc(p.site) : '') +
+        '<br><a href="/app/licenses/' + p.id + '" style="color:#2b6cb0;font-weight:600">Open this record</a>'
+      );
+      selectedCluster.addLayer(m);
+    });
+    selectedMap.addLayer(selectedCluster);
+    selectedMap.fitBounds(selectedCluster.getBounds().pad(0.15));
+    setTimeout(function () { selectedMap.invalidateSize(); }, 150);
+  });
 </script>
 {% endblock %}

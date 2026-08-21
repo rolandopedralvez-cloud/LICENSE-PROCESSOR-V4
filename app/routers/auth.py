@@ -1,4 +1,3 @@
-
 """app/routers/auth.py — /api/login, /api/pin-login, /api/set-my-pin,
 /api/clear-my-pin, /api/logout, /api/auth-status, /api/my-permissions,
 /api/setup-admin. Moved verbatim from main.py (zero logic changes, still
@@ -10,7 +9,7 @@ from app.core import (
     get_conn, hash_pw, _new_token_entry, _effective_permissions,
     any_user_exists, _current_user_info, TOKENS, ALL_PERMISSIONS,
     LOGIN_ATTEMPTS, LOGIN_LOCKOUT_SECONDS, LOGIN_MAX_ATTEMPTS,
-    TOKEN_ABSOLUTE_TIMEOUT_SECONDS,
+    TOKEN_ABSOLUTE_TIMEOUT_SECONDS, _user_display_prefs,
 )
 
 router = APIRouter(tags=["auth"])
@@ -63,7 +62,8 @@ def login(data: dict = Body(...), response: Response = None):
     TOKENS[token] = _new_token_entry(username, role)
     _set_token_cookie(response, token)
     return {"ok": True, "token": token, "username": username, "role": role,
-            "permissions": _effective_permissions(username, role)}
+            "permissions": _effective_permissions(username, role),
+            "prefs": _user_display_prefs(username)}
 
 
 # ---- PIN sign-in: a quick 4-digit alternative to the full password ----
@@ -104,7 +104,8 @@ def pin_login(data: dict = Body(...), response: Response = None):
     TOKENS[token] = _new_token_entry(username, role)
     _set_token_cookie(response, token)
     return {"ok": True, "token": token, "username": username, "role": role,
-            "permissions": _effective_permissions(username, role)}
+            "permissions": _effective_permissions(username, role),
+            "prefs": _user_display_prefs(username)}
 
 
 @router.post("/api/set-my-pin")
@@ -197,4 +198,5 @@ def setup_admin(data: dict = Body(...), response: Response = None):
     TOKENS[token] = _new_token_entry(username, "super_admin")
     _set_token_cookie(response, token)
     return {"ok": True, "token": token, "username": username, "role": "super_admin",
-            "permissions": list(ALL_PERMISSIONS)}
+            "permissions": list(ALL_PERMISSIONS),
+            "prefs": _user_display_prefs(username)}

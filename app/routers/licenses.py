@@ -206,7 +206,6 @@ def location_check(radius_km: float = 5.0, request: Request = None):
     order = {"impossible": 0, "missing": 0, "outlier": 1}
     flagged.sort(key=lambda f: (order.get(f["reason"], 2), -(f["distance_km"] or 0)))
     return {"count": len(flagged), "checked": len(recs), "results": flagged}
-@router.post("/api/batch/renew")
 def _add_one_year(iso_date):
     """'2025-06-28' -> '2026-06-28' -- used to roll a record's validity
     period forward by exactly one year on renewal (e.g. 2025-2026 becomes
@@ -225,6 +224,16 @@ def _add_one_year(iso_date):
     except ValueError:
         return datetime.date(y + 1, m, d - 1).isoformat()   # Feb 29 -> Feb 28
 
+
+# NOTE: this decorator used to be attached to _add_one_year (the helper
+# above) instead of batch_renew (the actual endpoint) -- a copy/paste slip
+# that meant POST /api/batch/renew was never actually registered as a real
+# route; FastAPI was instead exposing _add_one_year itself as the handler,
+# which expected a bare "iso_date" query parameter and 422'd on every real
+# request. Found while wiring up the new /app/batch-renew page and testing
+# it end to end with TestClient. Fixed here -- decorator now on the right
+# function. No other logic changed.
+@router.post("/api/batch/renew")
 def batch_renew(data: dict = Body(...), request: Request = None):
     """
     Renew many RSLs at once with one shared Official Receipt.

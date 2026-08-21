@@ -134,6 +134,11 @@ FORM_SECTIONS = [
         ("site_no", "Site No."), ("site_name", "Site Name"), ("address", "Address"),
         ("brgy", "Barangay"), ("town", "Town/City"), ("province", "Province"),
         ("region", "Region"), ("zip_code", "ZIP Code"), ("psgc", "PSGC"),
+        # Coordinates, in degrees/minutes/seconds (same split as the classic UI) --
+        # these also drive the pin map below the form: dragging/placing a pin
+        # fills these in automatically, and typing in these updates the pin.
+        ("elong_deg", "E Long °"), ("elong_min", "E Long ′"), ("elong_sec", "E Long ″"),
+        ("nlat_deg", "N Lat °"), ("nlat_min", "N Lat ′"), ("nlat_sec", "N Lat ″"),
     ]),
     ("Radio / Technical", [
         ("class_of_station", "Class of Station"), ("nature_of_service", "Nature of Service"),

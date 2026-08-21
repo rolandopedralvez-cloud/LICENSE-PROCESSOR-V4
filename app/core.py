@@ -1,4 +1,3 @@
-
 """
 app/core.py — shared helpers moved verbatim out of the original main.py
 (auth/token handling, permission checks, activity log, ensure_schema()).
@@ -122,6 +121,24 @@ def ensure_schema():
         conn.execute("ALTER TABLE users ADD COLUMN pin_salt BLOB;")
     if "pin_hash" not in cols(conn, "users"):
         conn.execute("ALTER TABLE users ADD COLUMN pin_hash BLOB;")
+    # personal display preferences -- each account's own choice, separate
+    # from permissions (which control what they're ALLOWED to do). Applied
+    # client-side only: theme/font affect how the app looks in that
+    # person's browser, nothing server-side depends on them.
+    if "theme" not in cols(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'light';")
+    if "font_family" not in cols(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN font_family TEXT DEFAULT 'sans';")
+    if "font_size" not in cols(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN font_size TEXT DEFAULT 'md';")
+    if "display_name" not in cols(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT;")
+    if "avatar_data" not in cols(conn, "users"):
+        # a small data: URI (already resized/compressed client-side before
+        # upload -- see /api/my-avatar) -- kept in the same telco.db the
+        # rest of the app already backs up, rather than a separate uploads
+        # folder that would need its own backup/restore handling.
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_data TEXT;")
     # per-user feature checklist for "user"-role accounts (super_admin always
     # has everything regardless of this). Stored as a JSON array of strings.
     if "permissions" not in cols(conn, "users"):
@@ -325,6 +342,27 @@ def _effective_permissions(username, role):
     if role == "super_admin":
         return list(ALL_PERMISSIONS)
     return _user_permissions(username)
+
+
+def _user_display_prefs(username):
+    """This account's own display preferences (theme/font/name/avatar) --
+    returned at login so the app can apply them immediately, and again from
+    /api/my-preferences whenever the Account Preferences page needs a fresh
+    copy (e.g. after another device changed them)."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT theme, font_family, font_size, display_name, avatar_data FROM users WHERE username = ?",
+        (username,)).fetchone()
+    conn.close()
+    if not row:
+        return {"theme": "light", "font_family": "sans", "font_size": "md", "display_name": None, "avatar_data": None}
+    return {
+        "theme": row["theme"] or "light",
+        "font_family": row["font_family"] or "sans",
+        "font_size": row["font_size"] or "md",
+        "display_name": row["display_name"],
+        "avatar_data": row["avatar_data"],
+    }
 
 
 # Password login lockout — same shape as the PIN lockout below, so a

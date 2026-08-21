@@ -235,19 +235,41 @@
   });
 
   // Fill in identity everywhere it appears (sidebar block + topbar dropdown).
+  // Display name and avatar come from Account Preferences
+  // (/api/my-preferences) when set, falling back to the plain username /
+  // initials otherwise.
   (function () {
-    const name = window.ntcUser() || 'User';
     const role = window.ntcRole() || '';
-    const initial = name.trim().charAt(0).toUpperCase() || 'U';
-    ['ntc-avatar', 'ntc-avatar-top'].forEach(function (id) {
-      const el = document.getElementById(id);
-      if (el) el.textContent = initial;
-    });
-    document.getElementById('ntc-whoami-name').textContent = name;
-    document.getElementById('ntc-whoami-role').textContent = role;
-    document.getElementById('ntc-whoami-top').textContent = name;
-    document.getElementById('ntc-whoami-menu-name').textContent = name;
-    document.getElementById('ntc-whoami-menu-role').textContent = role;
+
+    function applyIdentity(prefs) {
+      const name = (prefs && prefs.display_name && prefs.display_name.trim()) || window.ntcUser() || 'User';
+      const initial = name.trim().charAt(0).toUpperCase() || 'U';
+      const avatar = prefs && prefs.avatar_data;
+      ['ntc-avatar', 'ntc-avatar-top'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = avatar
+          ? '<img src="' + avatar + '" class="w-full h-full rounded-full object-cover" alt="">'
+          : window.ntcEsc(initial);
+      });
+      document.getElementById('ntc-whoami-name').textContent = name;
+      document.getElementById('ntc-whoami-role').textContent = role;
+      document.getElementById('ntc-whoami-top').textContent = name;
+      document.getElementById('ntc-whoami-menu-name').textContent = name;
+      document.getElementById('ntc-whoami-menu-role').textContent = role;
+    }
+
+    // Instant paint from the same-device cache (set at login, refreshed
+    // below), then a best-effort background refresh in case preferences
+    // changed on another device -- never blocks the page.
+    applyIdentity(window.ntcPrefs());
+    window.ntcFetch('/api/my-preferences').then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (fresh) {
+      if (!fresh) return;
+      window.ntcApplyPrefs(fresh);
+      applyIdentity(fresh);
+    }).catch(function () {});
   })();
 
   // Nav badge: total active licenses, from the already auth-protected

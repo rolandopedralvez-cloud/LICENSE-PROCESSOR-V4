@@ -7,7 +7,10 @@ import datetime
 from fastapi import APIRouter, HTTPException, Body, Request
 
 from app.config import DB
-from app.core import get_conn, role_for, require_super_admin
+from app.core import (
+    get_conn, role_for, require_super_admin, _current_user_info,
+    _user_display_prefs, hash_pw,
+)
 
 router = APIRouter(tags=["settings"])
 
@@ -140,3 +143,106 @@ def run_backup_now(request: Request):
     except Exception as e:
         _write_backup_status(state="error", last_error=str(e))
         raise HTTPException(500, f"Backup failed: {e}")
+
+
+# ---------------------------------------------------------------- ACCOUNT PREFERENCES
+# Personal, per-account display preferences -- available to EVERY signed-in
+# user (not just Super Admin, unlike the Backup section above). Theme/font
+# only ever affect how the app looks in that person's own browser; nothing
+# server-side reads or depends on them.
+VALID_THEMES = {"light", "dark"}
+VALID_FONTS = {"sans", "serif", "mono"}
+VALID_SIZES = {"sm", "md", "lg", "xl"}
+
+@router.get("/api/my-preferences")
+def get_my_preferences(request: Request):
+    info = _current_user_info(request)
+    if not info:
+        raise HTTPException(401, "Not authenticated")
+    prefs = _user_display_prefs(info["username"])
+    prefs["username"] = info["username"]
+    return prefs
+
+
+@router.put("/api/my-preferences")
+def update_my_preferences(data: dict = Body(...), request: Request = None):
+    info = _current_user_info(request)
+    if not info:
+        raise HTTPException(401, "Not authenticated")
+    sets, params = [], []
+    if "theme" in data:
+        theme = str(data["theme"]).strip()
+        if theme not in VALID_THEMES:
+            raise HTTPException(400, f"theme must be one of {sorted(VALID_THEMES)}")
+        sets.append("theme = ?"); params.append(theme)
+    if "font_family" in data:
+        font_family = str(data["font_family"]).strip()
+        if font_family not in VALID_FONTS:
+            raise HTTPException(400, f"font_family must be one of {sorted(VALID_FONTS)}")
+        sets.append("font_family = ?"); params.append(font_family)
+    if "font_size" in data:
+        font_size = str(data["font_size"]).strip()
+        if font_size not in VALID_SIZES:
+            raise HTTPException(400, f"font_size must be one of {sorted(VALID_SIZES)}")
+        sets.append("font_size = ?"); params.append(font_size)
+    if "display_name" in data:
+        sets.append("display_name = ?"); params.append((str(data["display_name"]).strip() or None))
+    if not sets:
+        raise HTTPException(400, "No valid preference fields supplied")
+    params.append(info["username"])
+    conn = get_conn()
+    conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE username = ?", params)
+    conn.commit(); conn.close()
+    prefs = _user_display_prefs(info["username"])
+    prefs["username"] = info["username"]
+    return {"ok": True, **prefs}
+
+
+# Cap comfortably above what a client-side-resized (e.g. 200x200) JPEG/PNG
+# needs as a base64 data: URI, while still keeping telco.db (which this is
+# stored in, see ensure_schema in app/core.py) from bloating if someone
+# tries to upload something huge -- the resize is expected to happen in the
+# browser before this is ever called; this is just a server-side backstop.
+MAX_AVATAR_DATA_URI_LEN = 400_000
+
+@router.post("/api/my-avatar")
+def update_my_avatar(data: dict = Body(...), request: Request = None):
+    info = _current_user_info(request)
+    if not info:
+        raise HTTPException(401, "Not authenticated")
+    avatar_data = data.get("data")
+    if avatar_data is not None:
+        if not isinstance(avatar_data, str) or not avatar_data.startswith("data:image/"):
+            raise HTTPException(400, "avatar must be a data:image/... URI")
+        if len(avatar_data) > MAX_AVATAR_DATA_URI_LEN:
+            raise HTTPException(400, "Image is too large — please use a smaller picture")
+    conn = get_conn()
+    conn.execute("UPDATE users SET avatar_data = ? WHERE username = ?", (avatar_data, info["username"]))
+    conn.commit(); conn.close()
+    return {"ok": True}
+
+
+@router.post("/api/my-password")
+def change_my_password(data: dict = Body(...), request: Request = None):
+    """Self-service password change -- separate from Manage Users' admin
+    reset (app/routers/users.py), which doesn't require knowing the old
+    password. Same 8-character floor as every other password path in the
+    app (see app/routers/auth.py's setup_admin)."""
+    info = _current_user_info(request)
+    if not info:
+        raise HTTPException(401, "Not authenticated")
+    current_password = data.get("current_password") or ""
+    new_password = data.get("new_password") or ""
+    if len(new_password) < 8:
+        raise HTTPException(400, "New password must be at least 8 characters")
+    conn = get_conn()
+    row = conn.execute("SELECT salt, pwhash FROM users WHERE username = ?", (info["username"],)).fetchone()
+    if not row or hash_pw(current_password, row["salt"]) != row["pwhash"]:
+        conn.close()
+        raise HTTPException(401, "Current password is incorrect")
+    import secrets
+    new_salt = secrets.token_bytes(16)
+    new_hash = hash_pw(new_password, new_salt)
+    conn.execute("UPDATE users SET salt = ?, pwhash = ? WHERE username = ?", (new_salt, new_hash, info["username"]))
+    conn.commit(); conn.close()
+    return {"ok": True}

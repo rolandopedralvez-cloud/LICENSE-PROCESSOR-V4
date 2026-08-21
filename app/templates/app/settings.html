@@ -1,0 +1,332 @@
+{% extends "app/_shell.html" %}
+{% block title %}Settings — NTC{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Account preferences for everyone; backup settings for Super Admins.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Settings</li>
+{% endblock %}
+
+{% block app_content %}
+
+<!-- ============================== ACCOUNT PREFERENCES ============================== -->
+<!-- Available to every signed-in account -- theme/font/name/photo only ever
+     affect how the app looks in that person's own browser. See
+     /api/my-preferences, /api/my-avatar, /api/my-password in
+     app/routers/settings.py. -->
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">Account Preferences</h2>
+  </div>
+  <div class="p-4">
+    <div class="flex flex-col sm:flex-row gap-6">
+
+      <!-- avatar -->
+      <div class="shrink-0 flex flex-col items-center gap-2">
+        <div class="w-20 h-20 rounded-full bg-brand-600 flex items-center justify-center text-white font-semibold text-2xl overflow-hidden" id="ap-avatar-preview">?</div>
+        <label class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50 cursor-pointer">
+          Change Photo
+          <input type="file" accept="image/*" id="ap-avatar-input" class="hidden">
+        </label>
+        <button id="ap-avatar-remove" class="hidden text-xs text-red-500 hover:underline">Remove photo</button>
+      </div>
+
+      <!-- fields -->
+      <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Display Name</label>
+          <input id="ap-display-name" type="text" placeholder="{{ 'e.g. Rolando P.' }}"
+                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Theme</label>
+          <select id="ap-theme" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Font Style</label>
+          <select id="ap-font-family" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+            <option value="sans">Sans-serif (default)</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Monospace</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Font Size</label>
+          <select id="ap-font-size" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+            <option value="sm">Small</option>
+            <option value="md">Medium (default)</option>
+            <option value="lg">Large</option>
+            <option value="xl">Extra Large</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 mt-4">
+      <button id="ap-save" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Save Preferences</button>
+      <p id="ap-status" class="text-sm"></p>
+    </div>
+  </div>
+</div>
+
+<!-- change password -->
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">Change Password</h2>
+  </div>
+  <div class="p-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Current Password</label>
+        <input id="ap-pw-current" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">New Password</label>
+        <input id="ap-pw-new" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Confirm New Password</label>
+        <input id="ap-pw-confirm" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="ap-pw-save" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Update Password</button>
+      <p id="ap-pw-status" class="text-sm"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== BACKUP (SUPER ADMIN ONLY) ============================== -->
+<div id="not-admin-notice" class="hidden bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-md px-4 py-3 mb-6">
+  The Backup sections below are only usable by a Super Admin account.
+</div>
+
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">Backup Folder</h2>
+  </div>
+  <div class="p-4">
+    <p class="text-sm text-gray-600 mb-3">
+      The app backs up here once per day, whenever it detects an internet connection — commonly a Google Drive sync folder.
+    </p>
+    <div class="flex flex-wrap gap-2 mb-3">
+      <input id="settings-folder" type="text" placeholder="e.g. G:\My Drive\NTC-Backups"
+             class="flex-1 min-w-[16rem] border border-gray-300 rounded-md px-3 py-2 text-sm">
+      <button id="btn-save-settings" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Save</button>
+    </div>
+    <p id="settings-status" class="text-sm"></p>
+  </div>
+</div>
+
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">Backup Status</h2>
+    <button id="btn-run-now" class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Run Backup Now</button>
+  </div>
+  <div class="p-4 text-sm text-gray-600" id="backup-status-body">Loading&hellip;</div>
+</div>
+
+<script>
+if (window.ntcRole() !== 'super_admin') { document.getElementById('not-admin-notice').classList.remove('hidden'); }
+
+// ============================== ACCOUNT PREFERENCES ==============================
+let AP_AVATAR_DATA = null;   // pending avatar (data: URI) not yet saved, or explicit null to clear
+let AP_AVATAR_CHANGED = false;
+
+function apRenderAvatar(dataUri) {
+  const el = document.getElementById('ap-avatar-preview');
+  const removeBtn = document.getElementById('ap-avatar-remove');
+  if (dataUri) {
+    el.innerHTML = '<img src="' + dataUri + '" class="w-full h-full object-cover" alt="">';
+    removeBtn.classList.remove('hidden');
+  } else {
+    const name = document.getElementById('ap-display-name').value.trim() || window.ntcUser() || 'User';
+    el.textContent = name.trim().charAt(0).toUpperCase() || 'U';
+    removeBtn.classList.add('hidden');
+  }
+}
+
+function loadPreferences() {
+  window.ntcFetch('/api/my-preferences').then(function (res) { return res.json(); }).then(function (data) {
+    document.getElementById('ap-display-name').value = data.display_name || '';
+    document.getElementById('ap-theme').value = data.theme || 'light';
+    document.getElementById('ap-font-family').value = data.font_family || 'sans';
+    document.getElementById('ap-font-size').value = data.font_size || 'md';
+    apRenderAvatar(data.avatar_data || null);
+  }).catch(function () {
+    const el = document.getElementById('ap-status');
+    el.innerHTML = window.ntcErrorState('Could not load preferences.', 'loadPreferences', 0);
+  });
+}
+
+// Client-side downscale before upload -- keeps the stored data: URI well
+// under the server's 400,000-char cap (see MAX_AVATAR_DATA_URI_LEN in
+// app/routers/settings.py) no matter how large the original photo is.
+function apResizeImage(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function () {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = function () {
+        const SIZE = 200;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE; canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        // cover-crop to a square so the result isn't squashed
+        const scale = Math.max(SIZE / img.width, SIZE / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('ap-avatar-input').addEventListener('change', function (evt) {
+  const file = evt.target.files && evt.target.files[0];
+  evt.target.value = '';
+  if (!file) return;
+  apResizeImage(file).then(function (dataUri) {
+    AP_AVATAR_DATA = dataUri;
+    AP_AVATAR_CHANGED = true;
+    apRenderAvatar(dataUri);
+  }).catch(function () {
+    window.ntcToast('Could not read that image.', true);
+  });
+});
+document.getElementById('ap-avatar-remove').addEventListener('click', function () {
+  AP_AVATAR_DATA = null;
+  AP_AVATAR_CHANGED = true;
+  apRenderAvatar(null);
+});
+document.getElementById('ap-display-name').addEventListener('input', function () {
+  if (!AP_AVATAR_DATA) apRenderAvatar(null); // keep the fallback initial in sync while typing
+});
+
+document.getElementById('ap-save').addEventListener('click', function (evt) {
+  window.ntcBusy(evt.currentTarget, async function () {
+    const el = document.getElementById('ap-status');
+    const payload = {
+      theme: document.getElementById('ap-theme').value,
+      font_family: document.getElementById('ap-font-family').value,
+      font_size: document.getElementById('ap-font-size').value,
+      display_name: document.getElementById('ap-display-name').value.trim(),
+    };
+    try {
+      const r = await window.ntcFetchJSON('/api/my-preferences', { method: 'PUT', body: JSON.stringify(payload) });
+      if (!r.ok) { el.textContent = (r.body && r.body.detail) || 'Save failed.'; el.className = 'text-sm text-red-600'; return; }
+      let latest = r.body;
+      if (AP_AVATAR_CHANGED) {
+        const ar = await window.ntcFetchJSON('/api/my-avatar', { method: 'POST', body: JSON.stringify({ data: AP_AVATAR_DATA }) });
+        if (!ar.ok) { el.textContent = (ar.body && ar.body.detail) || 'Preferences saved, but the photo failed to save.'; el.className = 'text-sm text-red-600'; return; }
+        latest = Object.assign({}, latest, { avatar_data: AP_AVATAR_DATA });
+        AP_AVATAR_CHANGED = false;
+      }
+      window.ntcApplyPrefs(latest);   // instant theme/font preview across the app right now
+      el.textContent = 'Saved.'; el.className = 'text-sm text-emerald-600';
+      window.ntcToast('Preferences saved.');
+    } catch (e) {
+      el.textContent = 'Could not reach the server — preferences were not saved.'; el.className = 'text-sm text-red-600';
+    }
+  });
+});
+
+document.getElementById('ap-pw-save').addEventListener('click', function (evt) {
+  const current = document.getElementById('ap-pw-current').value;
+  const next = document.getElementById('ap-pw-new').value;
+  const confirmPw = document.getElementById('ap-pw-confirm').value;
+  const el = document.getElementById('ap-pw-status');
+  if (next.length < 8) { el.textContent = 'New password must be at least 8 characters.'; el.className = 'text-sm text-red-600'; return; }
+  if (next !== confirmPw) { el.textContent = 'New passwords do not match.'; el.className = 'text-sm text-red-600'; return; }
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/my-password', { method: 'POST', body: JSON.stringify({ current_password: current, new_password: next }) });
+      if (!r.ok) { el.textContent = (r.body && r.body.detail) || 'Could not update password.'; el.className = 'text-sm text-red-600'; return; }
+      el.textContent = 'Password updated.'; el.className = 'text-sm text-emerald-600';
+      window.ntcToast('Password updated.');
+      document.getElementById('ap-pw-current').value = '';
+      document.getElementById('ap-pw-new').value = '';
+      document.getElementById('ap-pw-confirm').value = '';
+    } catch (e) {
+      el.textContent = 'Could not reach the server.'; el.className = 'text-sm text-red-600';
+    }
+  });
+});
+
+loadPreferences();
+
+function loadSettings() {
+  window.ntcFetch('/api/settings').then(function (res) { return res.json(); }).then(function (data) {
+    document.getElementById('settings-folder').value = data.gdrive_backup_folder || '';
+  }).catch(function () {
+    const el = document.getElementById('settings-status');
+    el.innerHTML = 'Could not load current settings. ' + window.ntcErrorState('', 'loadSettings', 0);
+    el.className = 'text-sm text-red-600';
+  });
+}
+document.getElementById('btn-save-settings').addEventListener('click', function (evt) {
+  const val = document.getElementById('settings-folder').value.trim();
+  window.ntcBusy(evt.currentTarget, async function () {
+    const el = document.getElementById('settings-status');
+    try {
+      const r = await window.ntcFetchJSON('/api/settings', { method: 'POST', body: JSON.stringify({ gdrive_backup_folder: val }) });
+      if (!r.ok) { el.textContent = (r.body && r.body.detail) || 'Save failed.'; el.className = 'text-sm text-red-600'; return; }
+      el.textContent = 'Saved.'; el.className = 'text-sm text-emerald-600';
+    } catch (e) {
+      el.textContent = 'Could not reach the server — setting was not saved.'; el.className = 'text-sm text-red-600';
+    }
+  });
+});
+
+const STATE_LABEL = {
+  unknown: 'No backup recorded yet', checking: 'Checking…', backing_up: 'Backing up…',
+  done: 'Up to date', error: 'Last attempt failed', no_internet: 'Waiting for an internet connection',
+};
+function loadBackupStatus() {
+  window.ntcFetch('/api/backup-status').then(function (res) { return res.json(); }).then(function (data) {
+    const el = document.getElementById('backup-status-body');
+    const label = STATE_LABEL[data.state] || data.state || 'Unknown';
+    let html = '<p><span class="font-medium">' + label + '</span></p>';
+    if (data.last_backup) html += '<p class="text-xs text-gray-400 mt-1">Last backup: ' + data.last_backup + '</p>';
+    if (data.last_backup_path) html += '<p class="text-xs text-gray-400">Location: ' + data.last_backup_path + '</p>';
+    if (data.last_error) html += '<p class="text-xs text-red-500 mt-1">' + data.last_error + '</p>';
+    if (data.updated_at) html += '<p class="text-xs text-gray-300 mt-1">Updated: ' + data.updated_at + '</p>';
+    el.innerHTML = html;
+  }).catch(function () { document.getElementById('backup-status-body').innerHTML = window.ntcErrorState('Could not load backup status.', 'loadBackupStatus', 0); });
+}
+document.getElementById('btn-run-now').addEventListener('click', function (evt) {
+  window.ntcBusy(evt.currentTarget, async function () {
+    window.ntcToast('Running backup now — this can take a few minutes for a large database…');
+    // Backing up copies the whole app folder plus a DB snapshot, which can
+    // genuinely take a while on a slow disk/connection -- give it a long
+    // window (5 min) rather than the default browser timeout (which varies
+    // and can cut this off mid-copy while it's still actually working).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () { controller.abort(); }, 300000);
+    try {
+      const res = await window.ntcFetch('/api/backup/run-now', { method: 'POST', signal: controller.signal });
+      clearTimeout(timeoutId);
+      let body = null;
+      try { body = await res.json(); } catch (e2) {}
+      if (!res.ok) { window.ntcToast((body && body.detail) || 'Backup failed.', true); return; }
+      window.ntcToast('Backup complete: ' + ((body && body.path) || ''));
+      loadBackupStatus();
+    } catch (e) {
+      clearTimeout(timeoutId);
+      window.ntcToast(e.name === 'AbortError'
+        ? 'This is taking longer than expected — check Backup Status below in a bit; it may still be running or may have finished.'
+        : 'Could not reach the server.', true);
+    }
+  });
+});
+
+loadSettings();
+loadBackupStatus();
+</script>
+{% endblock %}

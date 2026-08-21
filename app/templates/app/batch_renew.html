@@ -8,7 +8,15 @@
 
 {% block app_content %}
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+  <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
 
   <!-- ============================== PICK RECORDS ============================== -->
   <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
@@ -92,6 +100,21 @@
       </button>
     </div>
   </div>
+  </div>
+  <!-- ============================== RIGHT: LIVE PIN MAP ============================== -->
+  <div class="lg:col-span-1 lg:sticky lg:top-4">
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
+      <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Pinned Stations</h2>
+        <button id="btn-batch-map-clear" class="text-xs text-gray-400 hover:text-gray-700">Clear</button>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-400 mb-2">Updates live as you check records above, in "1. Pick Records" or an OR Folder.</p>
+        <div id="batch-map" class="rounded-md border border-gray-200" style="height:420px;"></div>
+        <div id="batch-map-label" class="text-xs text-gray-500 mt-2">Nothing pinned yet.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ============================== OR BATCHES (folder browser) ============================== -->
@@ -104,26 +127,93 @@
 </div>
 
 <script>
-let SEL = new Map(); // id -> {license_no, licensee, validity_to}
+let SEL = new Map(); // id -> {license_no, licensee, validity_to, coords}
 
 function renderSelected() {
   document.getElementById('sel-count').textContent = '(' + SEL.size + ')';
   document.getElementById('sel-list').innerHTML = Array.from(SEL.values()).map(function (r) {
     return '<li class="flex items-center justify-between"><span>' + window.ntcEsc(r.license_no || '#') + ' — ' + window.ntcEsc(r.licensee) + '</span>' +
-      '<a href="#" onclick="toggleSel(' + r.id + ',null,null,null);return false;" class="text-red-500 text-xs">remove</a></li>';
+      '<a href="#" onclick="toggleSel(' + r.id + ',null,null,null,null);return false;" class="text-red-500 text-xs">remove</a></li>';
   }).join('') || '<li class="text-gray-400">Nothing selected yet.</li>';
   document.querySelectorAll('.batch-row-checkbox').forEach(function (cb) {
     cb.checked = SEL.has(Number(cb.dataset.id));
   });
+  refreshBatchMap();
 }
 
-window.toggleSel = function (id, license_no, licensee, validity_to) {
+// coords: optional {nlat_deg,nlat_min,nlat_sec,elong_deg,elong_min,elong_sec} OR {lat,lng} --
+// whatever shape is on hand where this gets called from (raw DMS parts from a
+// search row's data-* attributes, or a ready decimal pair from /api/or-batches).
+window.toggleSel = function (id, license_no, licensee, validity_to, coords) {
   if (SEL.has(id)) { SEL.delete(id); }
-  else { SEL.set(id, { id: id, license_no: license_no, licensee: licensee, validity_to: validity_to }); }
+  else { SEL.set(id, { id: id, license_no: license_no, licensee: licensee, validity_to: validity_to, coords: coords || null }); }
   renderSelected();
 };
 
 document.getElementById('btn-clear-sel').addEventListener('click', function () { SEL = new Map(); renderSelected(); });
+
+// ============================== LIVE PIN MAP (right column) ==============================
+// Mirrors the analytics page's live map: reflects SEL (the same set the
+// renew button uses) so "1. Pick Records" above updates it with every
+// check/uncheck, single or many at once -- no separate button needed.
+let batchMap = null, batchCluster = null;
+function dmsToDec(d, m, s) {
+  const dv = parseFloat(d) || 0, mv = parseFloat(m) || 0, sv = parseFloat(s) || 0;
+  return dv + mv / 60 + sv / 3600;
+}
+function carrierColor(licensee) {
+  const s = (licensee || '').toUpperCase();
+  if (s.includes('SMART')) return '#6FBF8B';
+  if (s.includes('GLOBE') || s.includes('INNOVE')) return '#6FA3D8';
+  if (s.includes('DIGITEL')) return '#E0C468';
+  if (s.includes('DITO')) return '#D98080';
+  return '#9AA5B1';
+}
+function carrierDivIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:' + color +
+          ';transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+    iconSize: [18, 18], iconAnchor: [9, 17], popupAnchor: [0, -16],
+  });
+}
+function initBatchMap() {
+  if (batchMap) return;
+  batchMap = L.map('batch-map', { zoomControl: true }).setView([16.9, 121.6], 7);
+  const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri World Imagery' });
+  streets.addTo(batchMap);
+  L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(batchMap);
+}
+function coordsToDec(c) {
+  if (!c) return { lat: 0, lng: 0 };
+  if (c.lat != null) return { lat: c.lat, lng: c.lng };
+  return { lat: dmsToDec(c.nlat_deg, c.nlat_min, c.nlat_sec), lng: dmsToDec(c.elong_deg, c.elong_min, c.elong_sec) };
+}
+function refreshBatchMap() {
+  initBatchMap();
+  if (batchCluster) batchMap.removeLayer(batchCluster);
+  batchCluster = L.markerClusterGroup();
+  const lbl = document.getElementById('batch-map-label');
+  const items = Array.from(SEL.values());
+  const valid = items.map(function (r) { return { r: r, dec: coordsToDec(r.coords) }; }).filter(function (x) { return x.dec.lat > 0 && x.dec.lng > 0; });
+
+  if (!items.length) lbl.textContent = 'Nothing pinned yet.';
+  else if (!valid.length) lbl.textContent = items.length + ' selected, but none have coordinates set.';
+  else lbl.textContent = valid.length + ' of ' + items.length + ' selected station(s) pinned.';
+
+  valid.forEach(function (x) {
+    const m = L.marker([x.dec.lat, x.dec.lng], { icon: carrierDivIcon(carrierColor(x.r.licensee)) });
+    m.bindPopup('<b>' + window.ntcEsc(x.r.license_no || '') + '</b><br>' + window.ntcEsc(x.r.licensee || '') +
+      '<br><a href="/app/licenses/' + x.r.id + '" style="color:#2b6cb0;font-weight:600">Open this record</a>');
+    batchCluster.addLayer(m);
+  });
+  batchMap.addLayer(batchCluster);
+  if (valid.length) batchMap.fitBounds(batchCluster.getBounds().pad(0.15));
+  setTimeout(function () { batchMap.invalidateSize(); }, 100);
+}
+document.getElementById('btn-batch-map-clear').addEventListener('click', function () { SEL = new Map(); renderSelected(); });
+initBatchMap();
 
 let searchTimer;
 document.getElementById('batch-search').addEventListener('keyup', function (e) {
@@ -151,8 +241,16 @@ function runBatchSearch(q) {
       if (!link) return;
       const id = Number(link.getAttribute('href').split('/').pop());
       const cells = row.querySelectorAll('td');
-      const lic_no = cells[0] ? cells[0].textContent.trim() : '';
-      const licensee = cells[1] ? cells[1].textContent.trim() : '';
+      // cells[0] is the row-select checkbox column (also carries this
+      // record's coordinates in data-* attrs -- see _license_rows.html);
+      // license no. and licensee are cells[1] and cells[2].
+      const srcCheckbox = row.querySelector('.ntc-row-select');
+      const lic_no = cells[1] ? cells[1].textContent.trim() : '';
+      const licensee = cells[2] ? cells[2].textContent.trim() : '';
+      const coords = srcCheckbox ? {
+        nlat_deg: srcCheckbox.dataset.nlatDeg, nlat_min: srcCheckbox.dataset.nlatMin, nlat_sec: srcCheckbox.dataset.nlatSec,
+        elong_deg: srcCheckbox.dataset.elongDeg, elong_min: srcCheckbox.dataset.elongMin, elong_sec: srcCheckbox.dataset.elongSec,
+      } : null;
       const tr = document.createElement('tr');
       tr.className = 'odd:bg-white even:bg-gray-50/60 hover:bg-brand-50';
       tr.innerHTML = '<td class="py-2 px-3"><input type="checkbox" class="batch-row-checkbox" data-id="' + id + '"></td>' +
@@ -160,7 +258,7 @@ function runBatchSearch(q) {
         '<td class="py-2 px-3 text-gray-600">' + window.ntcEsc(licensee) + '</td>' +
         '<td class="py-2 px-3 text-gray-500 text-xs">—</td>';
       tr.querySelector('.batch-row-checkbox').addEventListener('change', function () {
-        window.toggleSel(id, lic_no, licensee, null);
+        window.toggleSel(id, lic_no, licensee, null, coords);
       });
       body.appendChild(tr);
     });
@@ -214,9 +312,16 @@ function showOrBatches() {
       el.innerHTML = '<p class="text-gray-400">No past batches yet.</p>';
       return;
     }
+    // indexed by id so the checkbox handlers below don't need to smuggle
+    // coordinates through HTML attributes -- the record data (including
+    // its DMS coordinates, already returned by /api/or-batches) is just
+    // looked up directly.
+    window._orbRecBysId = {};
+    data.batches.forEach(function (b) { b.records.forEach(function (r) { window._orbRecBysId[r.id] = r; }); });
+
     el.innerHTML = data.batches.map(function (b, i) {
       const rowsHtml = b.records.map(function (r) {
-        return '<label class="flex items-center gap-2 py-1 text-sm"><input type="checkbox" class="or-batch-pick" data-batch="' + i + '" data-id="' + r.id + '" data-lic="' + window.ntcEsc(r.license_no) + '" data-name="' + window.ntcEsc(r.licensee) + '">' +
+        return '<label class="flex items-center gap-2 py-1 text-sm"><input type="checkbox" class="or-batch-pick" data-batch="' + i + '" data-id="' + r.id + '">' +
           window.ntcEsc(r.license_no) + ' — ' + window.ntcEsc(r.licensee) + '</label>';
       }).join('');
       return '<details class="border border-gray-100 rounded-md mb-2">' +
@@ -225,8 +330,10 @@ function showOrBatches() {
     }).join('');
     document.querySelectorAll('.or-batch-pick').forEach(function (cb) {
       cb.addEventListener('change', function () {
-        if (cb.checked) window.toggleSel(Number(cb.dataset.id), cb.dataset.lic, cb.dataset.name, null);
-        else window.toggleSel(Number(cb.dataset.id));
+        const id = Number(cb.dataset.id);
+        const r = window._orbRecBysId[id];
+        if (cb.checked) window.toggleSel(id, r && r.license_no, r && r.licensee, null, r);
+        else window.toggleSel(id);
       });
     });
   }).catch(function () {

@@ -8,7 +8,63 @@
 {% endblock %}
 {% block app_content %}
 
-<div class="flex items-center justify-end mb-4">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+  <!-- ============================== TOOLBAR (Record / Print) ============================== -->
+  <div class="flex items-center gap-2">
+    <div class="relative">
+      <button type="button" id="tb-record-btn"
+              class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+        Record <span class="text-xs opacity-80">&#9662;</span>
+      </button>
+      <div id="tb-record-menu" class="hidden absolute left-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-gray-100 py-1 z-30 text-sm">
+        <a href="/app/licenses/new" class="block px-4 py-2 hover:bg-gray-50 flex items-center justify-between">
+          <span>&#43;&nbsp; New</span><span class="text-xs text-gray-400">Ctrl+N</span>
+        </a>
+        <button type="button" id="tb-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between">
+          <span>&#128190;&nbsp; Save</span><span class="text-xs text-gray-400">Ctrl+S</span>
+        </button>
+        {% if lic_id %}
+        <button type="button" id="tb-save-as-new" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between">
+          <span>&#128209;&nbsp; Save as New</span><span class="text-xs text-gray-400">Ctrl+Shift+S</span>
+        </button>
+        <div class="h-px bg-gray-100 my-1"></div>
+        <button type="button" id="tb-delete" class="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600">&#128465;&nbsp; Delete</button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if lic_id %}
+    <div class="relative">
+      <button type="button" id="tb-print-btn"
+              class="bg-white border border-gray-300 rounded-md px-4 py-2 text-sm font-medium flex items-center gap-1.5 hover:bg-gray-50">
+        Print <span class="text-xs opacity-60">&#9662;</span>
+      </button>
+      <div id="tb-print-menu" class="hidden absolute left-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-gray-100 py-1 z-30 text-sm">
+        <button type="button" id="tb-print" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between">
+          <span>Print</span><span class="text-xs text-gray-400">Ctrl+P</span>
+        </button>
+        <button type="button" id="tb-preview" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between">
+          <span>Print Preview</span><span class="text-xs text-gray-400">Ctrl+Shift+P</span>
+        </button>
+        <button type="button" id="tb-open-file" class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between"
+                title="Open the filled-in file for viewing/editing (no print/preview)">
+          <span>Open File</span><span class="text-xs text-gray-400">Ctrl+O</span>
+        </button>
+        <div class="h-px bg-gray-100 my-1"></div>
+        <div class="px-4 pt-1 pb-1.5 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Template</div>
+        <div class="px-4 pb-2 flex gap-2">
+          <button type="button" id="tb-tpl-excel" class="tb-tpl-btn flex-1 border rounded-md px-2 py-1 text-xs">Excel</button>
+          <button type="button" id="tb-tpl-word" class="tb-tpl-btn flex-1 border rounded-md px-2 py-1 text-xs">Word</button>
+        </div>
+        <p class="px-4 pb-2 text-[10px] text-gray-400">Needs Microsoft Excel/Word on this machine — Windows only.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
   <a href="/app" class="text-sm text-brand-600 hover:underline flex items-center gap-1">
     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
       <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
@@ -33,6 +89,7 @@
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{{ label }}</label>
         <input
+          id="f_{{ field }}"
           name="{{ field }}"
           type="text"
           value="{{ (license[field] if license else '') or '' }}"
@@ -43,6 +100,30 @@
     </div>
   </div>
   {% endfor %}
+
+  <!-- ============================== PIN MAP ============================== -->
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <svg class="w-4 h-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      <h2 class="font-medium text-gray-700 text-sm">Station Location</h2>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-400 mb-3">
+        Click anywhere on the map to drop a pin, or drag the pin to move it — the E Long / N Lat fields above fill in automatically.
+        You can also type an address below to jump the map there. Nothing here is saved until you click Save.
+      </p>
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <input type="text" id="map-search" placeholder="Search an address or place name…"
+               class="flex-1 min-w-[220px] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        <button type="button" id="map-search-btn" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Search</button>
+        <button type="button" id="map-clear-pin" class="border border-red-200 text-red-600 rounded-md px-3 py-1.5 text-sm hover:bg-red-50">Clear Pin</button>
+      </div>
+      <div id="pin-map" class="rounded-md border border-gray-200" style="height:360px;"></div>
+      <div id="map-label" class="text-xs text-gray-500 mt-2">No coordinates set yet — click the map to drop a pin.</div>
+    </div>
+  </div>
 
   <div class="flex items-center gap-3">
     <button type="submit"
@@ -64,34 +145,6 @@
 </form>
 
 {% if lic_id %}
-<div class="mt-6 bg-white rounded-md shadow-sm border-t-4 border-cyan-500">
-  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-    <svg class="w-4 h-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m8-10V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0H7m8 0v10H7V7"/>
-    </svg>
-    <h2 class="font-medium text-gray-700 text-sm">Print RSL</h2>
-  </div>
-  <div class="p-4">
-    <p class="text-xs text-gray-400 mb-3">
-      Opens/prints via Excel or Word on the machine running this server — needs Microsoft Excel/Word and only works on Windows.
-    </p>
-    <div class="flex flex-wrap gap-2">
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'preview', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Preview</button>
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'print', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Print</button>
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'open', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Open</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'preview', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Preview</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'print', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Print</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'open', this)"
-              class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Open</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============================== PAYMENTS ============================== -->
 <div class="mt-6 bg-white rounded-md shadow-sm border-t-4 border-emerald-500">
   <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
@@ -137,6 +190,144 @@
 <script>
 const LIC_ID = {{ lic_id if lic_id else 'null' }};
 const statusBox = document.getElementById('form-status');
+
+// ============================== PIN MAP ==============================
+// Mirrors the classic UI's map/pin editor: degrees-minutes-seconds <->
+// decimal conversion, click/drag to set the pin, and the fields update
+// each other live. Region II, Philippines (where this app is used) is the
+// default view when no coordinates are set yet.
+(function () {
+  const R2_CENTER = [16.9, 121.6], R2_ZOOM = 7;
+  let pinMap = null, pinMarker = null;
+
+  function dmsToDec(d, m, s) {
+    const dv = parseFloat(d) || 0, mv = parseFloat(m) || 0, sv = parseFloat(s) || 0;
+    return dv + mv / 60 + sv / 3600;
+  }
+  function decToDms(dec) {
+    dec = Math.abs(dec);
+    let deg = Math.floor(dec);
+    let mf = (dec - deg) * 60;
+    let min = Math.floor(mf);
+    let sec = Math.round((mf - min) * 60 * 100) / 100;
+    if (sec >= 60) { sec -= 60; min += 1; }
+    if (min >= 60) { min -= 60; deg += 1; }
+    return { deg: deg, min: min, sec: sec };
+  }
+  function fieldVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+  function setField(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+
+  function readCoordFields() {
+    return {
+      lat: dmsToDec(fieldVal('f_nlat_deg'), fieldVal('f_nlat_min'), fieldVal('f_nlat_sec')),
+      lng: dmsToDec(fieldVal('f_elong_deg'), fieldVal('f_elong_min'), fieldVal('f_elong_sec')),
+    };
+  }
+  function writeCoordFields(lat, lng) {
+    const la = decToDms(lat), lo = decToDms(lng);
+    setField('f_nlat_deg', la.deg); setField('f_nlat_min', la.min); setField('f_nlat_sec', la.sec);
+    setField('f_elong_deg', lo.deg); setField('f_elong_min', lo.min); setField('f_elong_sec', lo.sec);
+  }
+  function updateLabel(lat, lng) {
+    const lbl = document.getElementById('map-label');
+    if (lbl) lbl.textContent = 'Pin at ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+  }
+
+  function initPinMap() {
+    if (pinMap || !window.L) return;
+    pinMap = L.map('pin-map', { zoomControl: true }).setView(R2_CENTER, R2_ZOOM);
+
+    // Same free, no-API-key basemaps as the classic UI: OpenStreetMap for
+    // streets, Esri World Imagery for satellite.
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '© OpenStreetMap' });
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Esri World Imagery' });
+    streets.addTo(pinMap);
+    L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(pinMap);
+
+    pinMap.on('click', function (e) {
+      placePin(e.latlng.lat, e.latlng.lng);
+    });
+
+    const existing = readCoordFields();
+    if (existing.lat > 0 && existing.lng > 0) {
+      placePin(existing.lat, existing.lng, true);
+    }
+    setTimeout(function () { pinMap.invalidateSize(); }, 150);
+  }
+
+  function placePin(lat, lng, skipFieldWrite, skipPan) {
+    if (!pinMap) return;
+    if (pinMarker) {
+      pinMarker.setLatLng([lat, lng]);
+    } else {
+      pinMarker = L.marker([lat, lng], { draggable: true }).addTo(pinMap);
+      pinMarker.on('dragend', function () {
+        const p = pinMarker.getLatLng();
+        writeCoordFields(p.lat, p.lng);
+        updateLabel(p.lat, p.lng);
+      });
+    }
+    if (!skipPan) pinMap.setView([lat, lng], Math.max(pinMap.getZoom(), 14));
+    if (!skipFieldWrite) writeCoordFields(lat, lng);
+    updateLabel(lat, lng);
+  }
+
+  document.getElementById('map-clear-pin').addEventListener('click', function () {
+    if (pinMarker && pinMap) { pinMap.removeLayer(pinMarker); pinMarker = null; }
+    setField('f_nlat_deg', ''); setField('f_nlat_min', ''); setField('f_nlat_sec', '');
+    setField('f_elong_deg', ''); setField('f_elong_min', ''); setField('f_elong_sec', '');
+    const lbl = document.getElementById('map-label');
+    if (lbl) lbl.textContent = 'No coordinates set — click the map to drop a pin.';
+  });
+
+  // Address search: OpenStreetMap's free Nominatim geocoder (no API key
+  // needed). Jumps the map there; doesn't place a pin by itself, since a
+  // place name is rarely the exact tower/site location — the person still
+  // clicks to drop the pin precisely once the map is centered.
+  function searchAddress() {
+    const q = (document.getElementById('map-search').value || '').trim();
+    if (!q) return;
+    const lbl = document.getElementById('map-label');
+    if (lbl) lbl.textContent = 'Searching…';
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (results) {
+        if (!results || !results.length) {
+          if (lbl) lbl.textContent = 'No place found for "' + q + '" — try a different search, or click the map directly.';
+          return;
+        }
+        const lat = parseFloat(results[0].lat), lng = parseFloat(results[0].lon);
+        if (!pinMap) initPinMap();
+        pinMap.setView([lat, lng], 15);
+        if (lbl) lbl.textContent = 'Found: ' + (results[0].display_name || (lat + ', ' + lng)) + ' — click the map to drop the pin here.';
+      })
+      .catch(function () {
+        if (lbl) lbl.textContent = 'Could not reach the address search service — check your connection.';
+      });
+  }
+  document.getElementById('map-search-btn').addEventListener('click', searchAddress);
+  document.getElementById('map-search').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); searchAddress(); }
+  });
+
+  // Typing directly into the coordinate fields also moves the pin, so the
+  // map and the fields never disagree with each other.
+  ['f_nlat_deg', 'f_nlat_min', 'f_nlat_sec', 'f_elong_deg', 'f_elong_min', 'f_elong_sec'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function () {
+      const c = readCoordFields();
+      if (c.lat > 0 && c.lng > 0) {
+        if (!pinMap) initPinMap();
+        placePin(c.lat, c.lng, true);
+      }
+    });
+  });
+
+  initPinMap();
+})();
 
 function showStatus(msg, isError) {
   statusBox.textContent = msg;
@@ -215,6 +406,81 @@ async function ntcPrint(url, mode, btnEl) {
     }
   });
 }
+
+// ============================== TOOLBAR (Record ▾ / Print ▾) ==============================
+// Reuses the exact same Save / Save-as-New / Delete / Print logic already
+// wired above (this just gives them a classic-UI-style dropdown home plus
+// keyboard shortcuts, instead of duplicating any of that logic).
+(function () {
+  function wireDropdown(btnId, menuId) {
+    const btn = document.getElementById(btnId), menu = document.getElementById(menuId);
+    if (!btn || !menu) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const isOpen = !menu.classList.contains('hidden');
+      document.querySelectorAll('.tb-menu-open').forEach(function (m) { m.classList.add('hidden'); m.classList.remove('tb-menu-open'); });
+      if (!isOpen) { menu.classList.remove('hidden'); menu.classList.add('tb-menu-open'); }
+    });
+  }
+  wireDropdown('tb-record-btn', 'tb-record-menu');
+  wireDropdown('tb-print-btn', 'tb-print-menu');
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.tb-menu-open').forEach(function (m) { m.classList.add('hidden'); m.classList.remove('tb-menu-open'); });
+  });
+
+  const tbSave = document.getElementById('tb-save');
+  if (tbSave) tbSave.addEventListener('click', function () {
+    document.getElementById('license-form').requestSubmit();
+  });
+  const tbSaveAsNew = document.getElementById('tb-save-as-new');
+  const bottomSaveAsNew = document.getElementById('btn-save-as-new');
+  if (tbSaveAsNew && bottomSaveAsNew) tbSaveAsNew.addEventListener('click', function () { bottomSaveAsNew.click(); });
+  const tbDelete = document.getElementById('tb-delete');
+  const bottomDelete = document.getElementById('btn-delete');
+  if (tbDelete && bottomDelete) tbDelete.addEventListener('click', function () { bottomDelete.click(); });
+
+  {% if lic_id %}
+  // Excel/Word template choice, remembered per-browser so it doesn't need
+  // re-picking every time -- matches the classic UI's Template toggle.
+  let PRINT_TEMPLATE = localStorage.getItem('ntc_print_template') || 'excel';
+  function applyTemplateButtons() {
+    const excelBtn = document.getElementById('tb-tpl-excel'), wordBtn = document.getElementById('tb-tpl-word');
+    [excelBtn, wordBtn].forEach(function (b) { b.classList.remove('bg-brand-600', 'text-white', 'border-brand-600'); b.classList.add('border-gray-300', 'text-gray-600'); });
+    const active = PRINT_TEMPLATE === 'word' ? wordBtn : excelBtn;
+    active.classList.remove('border-gray-300', 'text-gray-600');
+    active.classList.add('bg-brand-600', 'text-white', 'border-brand-600');
+  }
+  applyTemplateButtons();
+  document.getElementById('tb-tpl-excel').addEventListener('click', function (e) { e.stopPropagation(); PRINT_TEMPLATE = 'excel'; localStorage.setItem('ntc_print_template', 'excel'); applyTemplateButtons(); });
+  document.getElementById('tb-tpl-word').addEventListener('click', function (e) { e.stopPropagation(); PRINT_TEMPLATE = 'word'; localStorage.setItem('ntc_print_template', 'word'); applyTemplateButtons(); });
+  function templateUrl() { return PRINT_TEMPLATE === 'word' ? '/api/print-word/{{ lic_id }}' : '/api/print/{{ lic_id }}'; }
+
+  document.getElementById('tb-print').addEventListener('click', function (evt) { ntcPrint(templateUrl(), 'print', evt.currentTarget); });
+  document.getElementById('tb-preview').addEventListener('click', function (evt) { ntcPrint(templateUrl(), 'preview', evt.currentTarget); });
+  document.getElementById('tb-open-file').addEventListener('click', function (evt) { ntcPrint(templateUrl(), 'open', evt.currentTarget); });
+
+  // ---- keyboard shortcuts (same bindings as the classic UI) ----
+  document.addEventListener('keydown', function (e) {
+    const k = e.key.toLowerCase();
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (k === 's' && e.shiftKey) { e.preventDefault(); bottomSaveAsNew && bottomSaveAsNew.click(); return; }
+    if (k === 's') { e.preventDefault(); document.getElementById('license-form').requestSubmit(); return; }
+    if (k === 'o') { e.preventDefault(); ntcPrint(templateUrl(), 'open', document.getElementById('tb-open-file')); return; }
+    if (k === 'p' && e.shiftKey) { e.preventDefault(); ntcPrint(templateUrl(), 'preview', document.getElementById('tb-preview')); return; }
+    if (k === 'p') { e.preventDefault(); ntcPrint(templateUrl(), 'print', document.getElementById('tb-print')); return; }
+    if (k === 'n') { e.preventDefault(); window.location.href = '/app/licenses/new'; return; }
+  });
+  {% else %}
+  document.addEventListener('keydown', function (e) {
+    const k = e.key.toLowerCase();
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (k === 's') { e.preventDefault(); document.getElementById('license-form').requestSubmit(); return; }
+    if (k === 'n') { e.preventDefault(); window.location.href = '/app/licenses/new'; return; }
+  });
+  {% endif %}
+})();
 
 // ---- payments ----
 function loadPayments() {

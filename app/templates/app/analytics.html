@@ -8,6 +8,17 @@
 
 {% block app_content %}
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+
+<!-- ============================== LEFT: TABS ============================== -->
+<div class="xl:col-span-2">
+
 <div class="flex gap-1 mb-4 border-b border-gray-200">
   <button class="an-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-700" data-tab="detail">Detail</button>
   <button class="an-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="pivot">Pivot</button>
@@ -30,14 +41,21 @@
     </div>
   </div>
   <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
-    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
       <h2 class="font-medium text-gray-700 text-sm">Detail</h2>
-      <button id="btn-export-detail" class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Export .xlsx</button>
+      <div class="flex items-center gap-2 text-xs">
+        <button id="btn-pin-detail-selected" disabled
+                class="font-medium text-sky-600 border border-sky-200 rounded-md px-3 py-1.5 hover:bg-sky-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+          Pin Selected (<span id="detail-sel-count">0</span>)
+        </button>
+        <button id="btn-export-detail" class="font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Export .xlsx</button>
+      </div>
     </div>
     <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
       <table class="w-full text-sm border-collapse">
         <thead class="sticky top-0 bg-gray-50">
           <tr class="text-left border-b border-gray-200">
+            <th class="py-2.5 px-3 w-8"><input type="checkbox" id="detail-select-all"></th>
             <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
             <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
             <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Tech</th>
@@ -47,7 +65,7 @@
           </tr>
         </thead>
         <tbody id="an-detail-body" class="divide-y divide-gray-100">
-          <tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+          <tr><td colspan="7" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
         </tbody>
       </table>
     </div>
@@ -81,6 +99,7 @@
       <h2 class="font-medium text-gray-700 text-sm">Cross-tab</h2>
       <div id="pivot-selection-bar" class="hidden text-xs flex items-center gap-2">
         <span id="pivot-sel-count" class="text-gray-500"></span>
+        <button id="btn-pivot-pin-selected" class="text-sky-600 border border-sky-200 rounded-md px-2 py-1 hover:bg-sky-50">Pin to Map</button>
         <button id="btn-pivot-export-selected" class="text-brand-600 border border-brand-200 rounded-md px-2 py-1 hover:bg-brand-50">Export Selected</button>
         <button id="btn-pivot-clear-selected" class="text-gray-400 hover:text-gray-700">Clear</button>
       </div>
@@ -101,6 +120,29 @@
   </div>
   <div id="orb-body" class="p-4 text-sm text-gray-500">Loading&hellip;</div>
 </div>
+
+</div>
+<!-- ============================== END LEFT COLUMN ============================== -->
+
+<!-- ============================== RIGHT: LIVE PIN MAP ============================== -->
+<div class="xl:col-span-1 xl:sticky xl:top-4">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Pinned Stations</h2>
+      <button id="btn-map-clear" class="text-xs text-gray-400 hover:text-gray-700">Clear</button>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-400 mb-2">
+        Check records anywhere on this page — Detail rows, a Pivot selection, or an OR Folder — and they show up here immediately, colored by carrier.
+      </p>
+      <div id="an-map" class="rounded-md border border-gray-200" style="height:420px;"></div>
+      <div id="an-map-label" class="text-xs text-gray-500 mt-2">Nothing pinned yet.</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<!-- ============================== END GRID ============================== -->
 
 <script>
 function exportBlob(url, method, filename, btnEl) {
@@ -139,23 +181,146 @@ document.querySelectorAll('.an-tab-btn').forEach(function (btn) {
   });
 });
 
+// ============================== LIVE PIN MAP (right column) ==============================
+// One shared selection feeds the map from anywhere on this page (Detail
+// checkboxes, a Pivot selection, or an OR Folder's records) -- matches the
+// classic UI's "Pin Selected to Map" from Analytics, but here it's a single
+// persistent panel that updates live instead of a popup you have to reopen.
+let MAP_SEL = new Map(); // id -> {license_no, licensee, site, lat, lng}
+let anMap = null, anCluster = null;
+
+function dmsToDec(d, m, s) {
+  const dv = parseFloat(d) || 0, mv = parseFloat(m) || 0, sv = parseFloat(s) || 0;
+  return dv + mv / 60 + sv / 3600;
+}
+function carrierColor(licensee) {
+  const s = (licensee || '').toUpperCase();
+  if (s.includes('SMART')) return '#6FBF8B';
+  if (s.includes('GLOBE') || s.includes('INNOVE')) return '#6FA3D8';
+  if (s.includes('DIGITEL')) return '#E0C468';
+  if (s.includes('DITO')) return '#D98080';
+  return '#9AA5B1';
+}
+function carrierDivIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:' + color +
+          ';transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+    iconSize: [18, 18], iconAnchor: [9, 17], popupAnchor: [0, -16],
+  });
+}
+function initAnMap() {
+  if (anMap) return;
+  anMap = L.map('an-map', { zoomControl: true }).setView([16.9, 121.6], 7);
+  const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 19, attribution: '© OpenStreetMap' });
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: 'Esri World Imagery' });
+  streets.addTo(anMap);
+  L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(anMap);
+}
+// Redraws the map from MAP_SEL. Called after ANY change anywhere on the
+// page, so the map is always in sync -- "constantly updated" per station
+// added or removed, single or many at once.
+function refreshAnMap() {
+  initAnMap();
+  if (anCluster) anMap.removeLayer(anCluster);
+  anCluster = L.markerClusterGroup();
+  const valid = Array.from(MAP_SEL.values()).filter(function (p) { return p.lat > 0 && p.lng > 0; });
+  const lbl = document.getElementById('an-map-label');
+
+  if (!MAP_SEL.size) {
+    lbl.textContent = 'Nothing pinned yet.';
+  } else if (!valid.length) {
+    lbl.textContent = MAP_SEL.size + ' selected, but none have coordinates set.';
+  } else {
+    lbl.textContent = valid.length + ' of ' + MAP_SEL.size + ' selected station(s) pinned.';
+  }
+
+  valid.forEach(function (p) {
+    const m = L.marker([p.lat, p.lng], { icon: carrierDivIcon(carrierColor(p.licensee)) });
+    m.bindPopup(
+      '<b>' + window.ntcEsc(p.license_no || '') + '</b><br>' + window.ntcEsc(p.licensee || '') +
+      (p.site ? '<br>' + window.ntcEsc(p.site) : '') +
+      '<br><a href="/app/licenses/' + p.id + '" style="color:#2b6cb0;font-weight:600">Open this record</a>'
+    );
+    anCluster.addLayer(m);
+  });
+  anMap.addLayer(anCluster);
+  if (valid.length) {
+    anMap.fitBounds(anCluster.getBounds().pad(0.15));
+  }
+  setTimeout(function () { anMap.invalidateSize(); }, 100);
+}
+function addToMapSel(items) {
+  // items: [{id, license_no, licensee, site, nlat_deg, nlat_min, nlat_sec, elong_deg, elong_min, elong_sec}]
+  //     or [{id, license_no, licensee, site, lat, lng}] (already-decimal, e.g. from pivot/selected)
+  items.forEach(function (it) {
+    const lat = it.lat != null ? it.lat : dmsToDec(it.nlat_deg, it.nlat_min, it.nlat_sec);
+    const lng = it.lng != null ? it.lng : dmsToDec(it.elong_deg, it.elong_min, it.elong_sec);
+    MAP_SEL.set(it.id, { id: it.id, license_no: it.license_no, licensee: it.licensee, site: it.site, lat: lat, lng: lng });
+  });
+  refreshAnMap();
+}
+function removeFromMapSel(ids) {
+  ids.forEach(function (id) { MAP_SEL.delete(id); });
+  refreshAnMap();
+}
+document.getElementById('btn-map-clear').addEventListener('click', function () {
+  MAP_SEL.clear();
+  document.querySelectorAll('.an-detail-cb').forEach(function (cb) { cb.checked = false; });
+  updateDetailSelBar();
+  refreshAnMap();
+});
+initAnMap();
+
 // ---- detail ----
+let DETAIL_ROWS = [];
+function updateDetailSelBar() {
+  const n = document.querySelectorAll('.an-detail-cb:checked').length;
+  document.getElementById('detail-sel-count').textContent = n;
+  document.getElementById('btn-pin-detail-selected').disabled = n === 0;
+}
 function loadDetail() {
   window.ntcFetch('/api/analytics').then(function (res) { return res.json(); }).then(function (data) {
     document.getElementById('an-total').textContent = data.total_unique_licenses ?? '—';
     document.getElementById('an-renewed').textContent = data.renewed ?? '—';
     document.getElementById('an-expired').textContent = data.expired ?? '—';
+    DETAIL_ROWS = data.rows || [];
     const body = document.getElementById('an-detail-body');
-    if (!data.rows || !data.rows.length) { body.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">No data.</td></tr>'; return; }
-    body.innerHTML = data.rows.map(function (r) {
+    if (!DETAIL_ROWS.length) { body.innerHTML = '<tr><td colspan="7" class="py-10 text-center text-gray-400 text-sm">No data.</td></tr>'; return; }
+    body.innerHTML = DETAIL_ROWS.map(function (r) {
       const badge = r.status === 'Expired' ? 'bg-red-100 text-red-700' : r.status === 'Renewed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600';
-      return '<tr class="odd:bg-white even:bg-gray-50/60"><td class="py-2 px-4 font-medium text-gray-700">' + window.ntcEsc(r.license_no) + '</td>' +
+      return '<tr class="odd:bg-white even:bg-gray-50/60">' +
+        '<td class="py-2 px-3"><input type="checkbox" class="an-detail-cb" data-id="' + r.id + '"></td>' +
+        '<td class="py-2 px-4 font-medium text-gray-700">' + window.ntcEsc(r.license_no) + '</td>' +
         '<td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.licensee) + '</td><td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.tech) + '</td>' +
         '<td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.province) + '</td><td class="py-2 px-4 text-gray-500 text-xs">' + window.ntcEsc(r.validity_to) + '</td>' +
         '<td class="py-2 px-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' + badge + '">' + window.ntcEsc(r.status) + '</span></td></tr>';
     }).join('');
-  }).catch(function () { document.getElementById('an-detail-body').innerHTML = window.ntcErrorState('Could not load analytics.', 'loadDetail', 6); });
+    document.querySelectorAll('.an-detail-cb').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const id = Number(cb.dataset.id);
+        if (cb.checked) {
+          const r = DETAIL_ROWS.find(function (x) { return x.id === id; });
+          if (r) addToMapSel([{ id: r.id, license_no: r.license_no, licensee: r.licensee, site: r.site_name,
+                                 nlat_deg: r.nlat_deg, nlat_min: r.nlat_min, nlat_sec: r.nlat_sec,
+                                 elong_deg: r.elong_deg, elong_min: r.elong_min, elong_sec: r.elong_sec }]);
+        } else {
+          removeFromMapSel([id]);
+        }
+        updateDetailSelBar();
+      });
+    });
+    updateDetailSelBar();
+  }).catch(function () { document.getElementById('an-detail-body').innerHTML = window.ntcErrorState('Could not load analytics.', 'loadDetail', 7); });
 }
+document.getElementById('detail-select-all').addEventListener('change', function (e) {
+  document.querySelectorAll('.an-detail-cb').forEach(function (cb) { if (cb.checked !== e.target.checked) { cb.checked = e.target.checked; cb.dispatchEvent(new Event('change')); } });
+});
+document.getElementById('btn-pin-detail-selected').addEventListener('click', function () {
+  document.getElementById('an-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
 document.getElementById('btn-export-detail').addEventListener('click', function (evt) { exportBlob('/api/analytics/export', 'POST', 'RSL_Analytics.xlsx', evt.currentTarget); });
 
 // ---- pivot ----
@@ -208,17 +373,74 @@ document.getElementById('btn-pivot-export-selected').addEventListener('click', f
   const values = Array.from(PIVOT_SEL).join(',');
   exportBlob('/api/analytics/pivot/selected/export?y=' + y + '&values=' + encodeURIComponent(values), 'POST', 'RSL_Pivot_Selected.xlsx', evt.currentTarget);
 });
+document.getElementById('btn-pivot-pin-selected').addEventListener('click', function (evt) {
+  if (!PIVOT_SEL.size) return;
+  const y = document.getElementById('pivot-y').value;
+  const values = Array.from(PIVOT_SEL).join(',');
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const res = await window.ntcFetch('/api/analytics/pivot/selected?y=' + y + '&values=' + encodeURIComponent(values));
+      const data = await res.json();
+      if (!res.ok) { window.ntcToast((data && data.detail) || 'Could not load those stations.', true); return; }
+      addToMapSel((data.rows || []).map(function (r) {
+        return { id: r.id, license_no: r.license_no, licensee: r.licensee, site: r.site_name, lat: r.lat, lng: r.lng };
+      }));
+      document.getElementById('an-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {
+      window.ntcToast('Could not reach the server.', true);
+    }
+  });
+});
 
 // ---- OR batches ----
 function loadOrBatches() {
   window.ntcFetch('/api/or-batches').then(function (res) { return res.json(); }).then(function (data) {
     const el = document.getElementById('orb-body');
     if (!data.batches || !data.batches.length) { el.innerHTML = '<p class="text-gray-400">No OR batches yet.</p>'; return; }
-    el.innerHTML = data.batches.map(function (b) {
+    el.innerHTML = data.batches.map(function (b, bi) {
+      const rowsHtml = b.records.map(function (r) {
+        return '<label class="flex items-center gap-2 py-1 text-sm">' +
+          '<input type="checkbox" class="orb-row-cb" data-batch="' + bi + '" data-rec="' + window.ntcEsc(JSON.stringify(r)) + '">' +
+          window.ntcEsc(r.license_no) + ' — ' + window.ntcEsc(r.licensee) + '</label>';
+      }).join('');
       return '<details class="border border-gray-100 rounded-md mb-2">' +
-        '<summary class="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50">OR ' + window.ntcEsc(b.or_no || '—') + ' &middot; ' + window.ntcEsc(b.or_date) + ' &middot; ' + b.count + ' record(s) &middot; &#8369;' + window.ntcEsc(b.or_amount || '0') + '</summary>' +
-        '<div class="p-3 text-sm text-gray-600">' + b.records.map(function (r) { return window.ntcEsc(r.license_no) + ' — ' + window.ntcEsc(r.licensee); }).join('<br>') + '</div></details>';
+        '<summary class="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 flex items-center justify-between">' +
+          '<span>OR ' + window.ntcEsc(b.or_no || '—') + ' &middot; ' + window.ntcEsc(b.or_date) + ' &middot; ' + b.count + ' record(s) &middot; &#8369;' + window.ntcEsc(b.or_amount || '0') + '</span>' +
+          '<a href="#" class="orb-pin-batch text-sky-600 text-xs font-medium" data-batch="' + bi + '">Pin all to map</a>' +
+        '</summary>' +
+        '<div class="p-3 text-sm text-gray-600">' + rowsHtml + '</div></details>';
     }).join('');
+
+    // stash the raw batch data for the "Pin all to map" links (avoids re-parsing the JSON-in-attribute for every row)
+    window._orBatches = data.batches;
+
+    document.querySelectorAll('.orb-row-cb').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const r = JSON.parse(cb.dataset.rec);
+        if (cb.checked) {
+          addToMapSel([{ id: r.id, license_no: r.license_no, licensee: r.licensee, site: r.site_name,
+                          nlat_deg: r.nlat_deg, nlat_min: r.nlat_min, nlat_sec: r.nlat_sec,
+                          elong_deg: r.elong_deg, elong_min: r.elong_min, elong_sec: r.elong_sec }]);
+        } else {
+          removeFromMapSel([r.id]);
+        }
+      });
+    });
+    document.querySelectorAll('.orb-pin-batch').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        const batch = window._orBatches[Number(a.dataset.batch)];
+        if (!batch) return;
+        addToMapSel(batch.records.map(function (r) {
+          return { id: r.id, license_no: r.license_no, licensee: r.licensee, site: r.site_name,
+                    nlat_deg: r.nlat_deg, nlat_min: r.nlat_min, nlat_sec: r.nlat_sec,
+                    elong_deg: r.elong_deg, elong_min: r.elong_min, elong_sec: r.elong_sec };
+        }));
+        // keep the individual row checkboxes for this batch in sync
+        document.querySelectorAll('.orb-row-cb[data-batch="' + a.dataset.batch + '"]').forEach(function (cb) { cb.checked = true; });
+        document.getElementById('an-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
   }).catch(function () { document.getElementById('orb-body').innerHTML = window.ntcErrorState('Could not load OR Folders.', 'loadOrBatches', 0); });
 }
 document.getElementById('btn-export-orbatches').addEventListener('click', function (evt) { exportBlob('/api/or-batches/export', 'POST', 'RSL_OR_Batches.xlsx', evt.currentTarget); });

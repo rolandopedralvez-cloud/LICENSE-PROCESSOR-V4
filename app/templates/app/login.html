@@ -61,6 +61,10 @@ document.getElementById('login-form').addEventListener('submit', async function 
     localStorage.setItem('ntc_role', data.role);
     localStorage.setItem('ntc_user', data.username);
     try { localStorage.setItem('ntc_perms', JSON.stringify(data.permissions || [])); } catch (e) {}
+    // Cache this account's display preferences (theme/font/name/avatar) so
+    // the very next page can apply them before first paint -- see the
+    // early theme-init script in base.html <head>.
+    try { if (data.prefs) localStorage.setItem('ntc_prefs', JSON.stringify(data.prefs)); } catch (e) {}
     window.location.href = '/app';
   } catch (err) {
     errBox.textContent = 'Could not reach the server.';

@@ -16,7 +16,10 @@
     {% set status_text = (lic.license_status or lic.status or "") %}
     <tr class="odd:bg-white even:bg-gray-50/60 hover:bg-brand-50 transition-colors">
       <td class="py-2.5 px-4">
-        <input type="checkbox" class="ntc-row-select" data-id="{{ lic.id }}" data-lic="{{ lic.license_no or ('#' ~ lic.id) }}">
+        <input type="checkbox" class="ntc-row-select" data-id="{{ lic.id }}" data-lic="{{ lic.license_no or ('#' ~ lic.id) }}"
+               data-licensee="{{ lic.licensee or '' }}" data-site="{{ lic.site_name or '' }}"
+               data-nlat-deg="{{ lic.nlat_deg or '' }}" data-nlat-min="{{ lic.nlat_min or '' }}" data-nlat-sec="{{ lic.nlat_sec or '' }}"
+               data-elong-deg="{{ lic.elong_deg or '' }}" data-elong-min="{{ lic.elong_min or '' }}" data-elong-sec="{{ lic.elong_sec or '' }}">
       </td>
       <td class="py-2.5 px-4 font-medium text-gray-700">{{ lic.license_no or "" }}</td>
       <td class="py-2.5 px-4 text-gray-600">{{ lic.licensee or "" }}</td>

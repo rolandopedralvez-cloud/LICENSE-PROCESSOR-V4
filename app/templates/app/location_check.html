@@ -8,6 +8,9 @@
 
 {% block app_content %}
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
   <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
     <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -18,8 +21,8 @@
   <div class="p-4">
     <p class="text-sm text-gray-600 mb-3">
       Flags records with no usable coordinates, coordinates outside Region II, or coordinates far from
-      other stations in the same barangay/town/province. This is diagnostic only — nothing is changed here;
-      click a flagged row to open and correct that record.
+      other stations in the same barangay/town/province. Click a row to preview it on the map on the right —
+      nothing changes until you click "Apply Suggested Location" or drag a pin and save.
     </p>
     <div class="flex items-center gap-3 flex-wrap">
       <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Outlier sensitivity</label>
@@ -30,31 +33,67 @@
         <option value="20">Very loose (20 km)</option>
       </select>
       <button id="btn-refresh" class="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Refresh</button>
+      <button id="btn-multi-edit" class="text-sm border border-sky-300 text-sky-600 rounded-md px-3 py-1.5 hover:bg-sky-50">Multi-Edit Mode: Off</button>
       <span id="loc-summary" class="text-sm text-gray-500 ml-auto"></span>
     </div>
+    <p id="multi-edit-hint" class="hidden text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-md px-3 py-2 mt-3">
+      Multi-Edit Mode is on — check several flagged rows below to see all their pins on the map at once, then drag any
+      orange pin to its true location. Nothing is saved until you click "Save Changes" in the map panel.
+    </p>
   </div>
 </div>
 
-<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
-  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-    <h2 class="font-medium text-gray-700 text-sm">Flagged Records</h2>
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+
+  <!-- ============================== LEFT: FLAGGED TABLE ============================== -->
+  <div class="xl:col-span-2 bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Flagged Records</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="text-left bg-gray-50 border-b border-gray-200">
+            <th id="loc-th-check" class="py-2.5 px-3 w-8 hidden"></th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Issue</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Location</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Detail</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Suggestion</th>
+          </tr>
+        </thead>
+        <tbody id="loc-body" class="divide-y divide-gray-100">
+          <tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm border-collapse">
-      <thead>
-        <tr class="text-left bg-gray-50 border-b border-gray-200">
-          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
-          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Issue</th>
-          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Location</th>
-          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Detail</th>
-          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Suggestion</th>
-        </tr>
-      </thead>
-      <tbody id="loc-body" class="divide-y divide-gray-100">
-        <tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
-      </tbody>
-    </table>
+
+  <!-- ============================== RIGHT: LIVE MAP ============================== -->
+  <div class="xl:col-span-1 xl:sticky xl:top-4">
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
+      <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm" id="locmap-title">Preview</h2>
+        <a id="locmap-open-record" href="#" class="hidden text-xs text-brand-600 hover:underline">Open record</a>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-400 mb-2">
+          <span style="color:#d97706">Orange</span> = current pin (drag to correct) &middot;
+          <span style="color:#0f9d8a">Green</span> = suggested area &middot;
+          <span style="color:#2b6cb0">Blue dots</span> = neighbor stations used for the suggestion.
+        </p>
+        <div id="locmap" class="rounded-md border border-gray-200" style="height:420px;"></div>
+        <div id="locmap-label" class="text-xs text-gray-500 mt-2">Click a flagged row to preview it here.</div>
+        <div id="loc-save-bar" class="hidden mt-3 flex items-center gap-2">
+          <button id="btn-loc-save" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium flex-1">
+            Save Changes (<span id="loc-pending-count">0</span>)
+          </button>
+          <button id="btn-loc-discard" class="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Discard</button>
+        </div>
+      </div>
+    </div>
   </div>
+
 </div>
 
 <script>
@@ -64,35 +103,238 @@ const REASON_STYLE = {
   outlier: 'bg-amber-100 text-amber-700',
 };
 const REASON_LABEL = { impossible: 'Impossible', missing: 'Missing', outlier: 'Outlier' };
+let LOC_RESULTS = [];      // cache of the last-loaded flagged records, indexed by id
+let MULTI_EDIT = false;
+let PREVIEW_IDS = [];      // ids currently shown on the map (single click, or the multi-edit checkbox set)
+let PENDING = new Map();   // id -> {lat, lng} for a pin the user dragged but hasn't saved yet
+
+function decToDms(dec) {
+  dec = Math.abs(dec);
+  let deg = Math.floor(dec);
+  let mf = (dec - deg) * 60;
+  let min = Math.floor(mf);
+  let sec = Math.round((mf - min) * 60 * 100) / 100;
+  if (sec >= 60) { sec -= 60; min += 1; }
+  if (min >= 60) { min -= 60; deg += 1; }
+  return { deg: deg, min: min, sec: sec };
+}
+function resultById(id) { return LOC_RESULTS.find(function (r) { return r.id === id; }); }
 
 function loadLocationCheck() {
   const radius = document.getElementById('radius-select').value;
   const body = document.getElementById('loc-body');
-  body.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">Checking&hellip;</td></tr>';
+  body.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">Checking&hellip;</td></tr>';
   window.ntcFetch('/api/location-check?radius_km=' + encodeURIComponent(radius)).then(function (res) {
     return res.json();
   }).then(function (data) {
     document.getElementById('loc-summary').textContent = data.count + ' of ' + data.checked + ' records flagged';
-    if (!data.results || !data.results.length) {
-      body.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">No issues found — every checked record looks fine.</td></tr>';
-      return;
-    }
-    body.innerHTML = data.results.map(function (r) {
-      const badge = REASON_STYLE[r.reason] || 'bg-gray-100 text-gray-600';
-      const label = REASON_LABEL[r.reason] || r.reason;
-      const suggestion = r.group_n ? ('Same ' + (r.group_basis || 'area') + ', ' + r.group_n + ' station(s)') : '';
-      return '<tr class="odd:bg-white even:bg-gray-50/60 hover:bg-brand-50 cursor-pointer" onclick="window.location.href=\'/app/licenses/' + r.id + '\'">' +
-        '<td class="py-2.5 px-4 font-medium text-gray-700">' + window.ntcEsc(r.license_no) + '</td>' +
-        '<td class="py-2.5 px-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' + badge + '">' + label + '</span></td>' +
-        '<td class="py-2.5 px-4 text-gray-600">' + window.ntcEsc([r.site_name, r.brgy, r.town, r.province].filter(Boolean).join(', ')) + '</td>' +
-        '<td class="py-2.5 px-4 text-gray-500 text-xs">' + window.ntcEsc(r.detail) + '</td>' +
-        '<td class="py-2.5 px-4 text-right text-xs text-gray-400">' + window.ntcEsc(suggestion) + '</td>' +
-        '</tr>';
-    }).join('');
+    LOC_RESULTS = data.results || [];
+    PREVIEW_IDS = []; PENDING.clear();
+    renderLocTable();
+    refreshLocMap();
   }).catch(function () {
-    body.innerHTML = window.ntcErrorState('Could not run the location check (check your connection, or you may not have the "Location Check" permission).', 'loadLocationCheck', 5);
+    body.innerHTML = window.ntcErrorState('Could not run the location check (check your connection, or you may not have the "Location Check" permission).', 'loadLocationCheck', 6);
   });
 }
+
+function renderLocTable() {
+  const body = document.getElementById('loc-body');
+  if (!LOC_RESULTS.length) {
+    body.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">No issues found — every checked record looks fine.</td></tr>';
+    return;
+  }
+  body.innerHTML = LOC_RESULTS.map(function (r) {
+    const badge = REASON_STYLE[r.reason] || 'bg-gray-100 text-gray-600';
+    const label = REASON_LABEL[r.reason] || r.reason;
+    const suggestion = r.group_n ? ('Same ' + (r.group_basis || 'area') + ', ' + r.group_n + ' station(s)') : '';
+    const applyLink = r.group_lat != null
+      ? '<a href="#" onclick="event.stopPropagation();window.ntcApplySuggested(' + r.id + ');return false;" class="text-emerald-600 hover:underline font-medium">Apply Suggested Location</a>'
+      : '<span class="text-gray-300">No suggestion available</span>';
+    const cb = '<td class="py-2.5 px-3 loc-check-cell ' + (MULTI_EDIT ? '' : 'hidden') + '">' +
+      '<input type="checkbox" class="loc-row-cb" data-id="' + r.id + '" ' + (PREVIEW_IDS.indexOf(r.id) !== -1 ? 'checked' : '') + '></td>';
+    return '<tr class="odd:bg-white even:bg-gray-50/60 hover:bg-brand-50 cursor-pointer" data-id="' + r.id + '" onclick="window.ntcPreviewLocRow(' + r.id + ')">' +
+      cb +
+      '<td class="py-2.5 px-4 font-medium text-gray-700">' + window.ntcEsc(r.license_no) + '</td>' +
+      '<td class="py-2.5 px-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' + badge + '">' + label + '</span></td>' +
+      '<td class="py-2.5 px-4 text-gray-600">' + window.ntcEsc([r.site_name, r.brgy, r.town, r.province].filter(Boolean).join(', ')) + '</td>' +
+      '<td class="py-2.5 px-4 text-gray-500 text-xs">' + window.ntcEsc(r.detail) + '</td>' +
+      '<td class="py-2.5 px-4 text-right text-xs">' +
+        '<div class="text-gray-400">' + window.ntcEsc(suggestion) + '</div>' + applyLink +
+      '</td>' +
+      '</tr>';
+  }).join('');
+  document.querySelectorAll('.loc-row-cb').forEach(function (cb) {
+    cb.addEventListener('click', function (e) { e.stopPropagation(); });
+    cb.addEventListener('change', function () {
+      const id = Number(cb.dataset.id);
+      if (cb.checked) { if (PREVIEW_IDS.indexOf(id) === -1) PREVIEW_IDS.push(id); }
+      else { PREVIEW_IDS = PREVIEW_IDS.filter(function (x) { return x !== id; }); PENDING.delete(id); }
+      refreshLocMap();
+    });
+  });
+}
+
+window.ntcPreviewLocRow = function (id) {
+  if (MULTI_EDIT) return; // in multi-edit mode, checkboxes (not the row click) control the selection
+  PREVIEW_IDS = [id];
+  refreshLocMap();
+};
+
+document.getElementById('btn-multi-edit').addEventListener('click', function (evt) {
+  MULTI_EDIT = !MULTI_EDIT;
+  evt.currentTarget.textContent = 'Multi-Edit Mode: ' + (MULTI_EDIT ? 'On' : 'Off');
+  evt.currentTarget.classList.toggle('bg-sky-50', MULTI_EDIT);
+  document.getElementById('multi-edit-hint').classList.toggle('hidden', !MULTI_EDIT);
+  document.getElementById('loc-th-check').classList.toggle('hidden', !MULTI_EDIT);
+  document.querySelectorAll('.loc-check-cell').forEach(function (td) { td.classList.toggle('hidden', !MULTI_EDIT); });
+  if (!MULTI_EDIT) { PREVIEW_IDS = []; PENDING.clear(); }
+  refreshLocMap();
+});
+
+// ============================== LIVE MAP (right column) ==============================
+let locMap = null, locMapLayers = [];
+function initLocMap() {
+  if (locMap) return;
+  locMap = L.map('locmap', { zoomControl: true }).setView([16.9, 121.6], 7);
+  const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri World Imagery' });
+  streets.addTo(locMap);
+  L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(locMap);
+}
+const dotIcon = { className: '', html: '<div style="width:9px;height:9px;border-radius:50%;background:#2b6cb0;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)"></div>', iconSize: [9, 9], iconAnchor: [4, 4] };
+const greenIcon = { className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#0f9d8a;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [16, 16], iconAnchor: [8, 8] };
+const orangeIcon = { className: '', html: '<div style="width:16px;height:16px;border-radius:50% 50% 50% 0;background:#d97706;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [16, 16], iconAnchor: [8, 15] };
+
+function refreshLocMap() {
+  initLocMap();
+  locMapLayers.forEach(function (l) { locMap.removeLayer(l); });
+  locMapLayers = [];
+  updateLocSaveBar();
+
+  const items = PREVIEW_IDS.map(resultById).filter(Boolean);
+  const titleEl = document.getElementById('locmap-title');
+  const openLink = document.getElementById('locmap-open-record');
+  const lbl = document.getElementById('locmap-label');
+
+  if (!items.length) {
+    titleEl.textContent = 'Preview';
+    openLink.classList.add('hidden');
+    lbl.textContent = MULTI_EDIT ? 'Check rows on the left to preview them here.' : 'Click a flagged row to preview it here.';
+    return;
+  }
+  if (items.length === 1) {
+    titleEl.textContent = (items[0].license_no || ('#' + items[0].id)) + ' — Preview';
+    openLink.href = '/app/licenses/' + items[0].id;
+    openLink.classList.remove('hidden');
+  } else {
+    titleEl.textContent = items.length + ' records selected';
+    openLink.classList.add('hidden');
+  }
+
+  const boundsPts = [];
+  items.forEach(function (item) {
+    if (item.group_lat != null) {
+      const glat = item.group_lat, glng = item.group_lng;
+      const circle = L.circle([glat, glng], { radius: 5000, color: '#0f9d8a', weight: 1.5, fillColor: '#0f9d8a', fillOpacity: 0.08 }).addTo(locMap);
+      locMapLayers.push(circle);
+      boundsPts.push([glat, glng]);
+      (item.group_points || []).forEach(function (p) {
+        if (!(p.lat > 0 && p.lng > 0)) return;
+        const m = L.marker([p.lat, p.lng], { icon: L.divIcon(dotIcon), zIndexOffset: -200 }).addTo(locMap);
+        m.bindPopup('<b>' + window.ntcEsc(p.license_no || '') + '</b><br>Existing station in this group<br>' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5));
+        locMapLayers.push(m);
+      });
+      const suggestMarker = L.marker([glat, glng], { icon: L.divIcon(greenIcon), zIndexOffset: -100 }).addTo(locMap);
+      suggestMarker.bindPopup('<b>Suggested area (median)</b><br>Based on ' + item.group_n + ' other station(s) in the same ' + window.ntcEsc(item.group_basis) +
+        '<br><a href="#" onclick="window.ntcApplySuggested(' + item.id + ');return false;" style="color:#0f9d8a;font-weight:600">Apply this to ' + window.ntcEsc(item.license_no || ('#' + item.id)) + '</a>');
+      locMapLayers.push(suggestMarker);
+    }
+
+    const pending = PENDING.get(item.id);
+    const curLat = pending ? pending.lat : item.lat, curLng = pending ? pending.lng : item.lng;
+    if (curLat > 0 && curLng > 0) {
+      const currentMarker = L.marker([curLat, curLng], { icon: L.divIcon(orangeIcon), draggable: true }).addTo(locMap);
+      currentMarker.bindPopup('<b>' + window.ntcEsc(item.license_no || '') + '</b><br>Drag to correct this pin<br>' + curLat.toFixed(5) + ', ' + curLng.toFixed(5));
+      currentMarker.on('dragend', function () {
+        const p = currentMarker.getLatLng();
+        PENDING.set(item.id, { lat: p.lat, lng: p.lng });
+        updateLocSaveBar();
+      });
+      locMapLayers.push(currentMarker);
+      boundsPts.push([curLat, curLng]);
+      if (item.group_lat != null) {
+        const line = L.polyline([[curLat, curLng], [item.group_lat, item.group_lng]], { color: '#d97706', weight: 2, dashArray: '5,6' }).addTo(locMap);
+        locMapLayers.push(line);
+      }
+    }
+  });
+
+  lbl.textContent = items.length + ' station(s) shown' + (PENDING.size ? ' — ' + PENDING.size + ' pin(s) moved, not yet saved' : '') + '.';
+  if (boundsPts.length) locMap.fitBounds(L.latLngBounds(boundsPts), { padding: [50, 50], maxZoom: 14 });
+  setTimeout(function () { locMap.invalidateSize(); }, 100);
+}
+
+function updateLocSaveBar() {
+  const bar = document.getElementById('loc-save-bar');
+  bar.classList.toggle('hidden', PENDING.size === 0);
+  document.getElementById('loc-pending-count').textContent = PENDING.size;
+}
+
+document.getElementById('btn-loc-discard').addEventListener('click', function () {
+  PENDING.clear();
+  refreshLocMap();
+});
+
+document.getElementById('btn-loc-save').addEventListener('click', function (evt) {
+  const ids = Array.from(PENDING.keys());
+  if (!ids.length) return;
+  window.ntcBusy(evt.currentTarget, async function () {
+    let okCount = 0, failCount = 0;
+    for (const id of ids) {
+      const p = PENDING.get(id);
+      const la = decToDms(p.lat), lo = decToDms(p.lng);
+      try {
+        const r = await window.ntcFetchJSON('/api/licenses/' + id, {
+          method: 'PUT',
+          body: JSON.stringify({
+            nlat_deg: String(la.deg), nlat_min: String(la.min), nlat_sec: String(la.sec),
+            elong_deg: String(lo.deg), elong_min: String(lo.min), elong_sec: String(lo.sec),
+          }),
+        });
+        if (r.ok) okCount++; else failCount++;
+      } catch (e) { failCount++; }
+    }
+    window.ntcToast(okCount + ' record(s) updated' + (failCount ? ', ' + failCount + ' failed' : '') + '.', failCount > 0);
+    PENDING.clear();
+    loadLocationCheck();
+  });
+});
+
+// One-click fix: write the suggested median position straight to this
+// record (same "recommended true location" the map already shows in
+// green) -- no need to open the record and retype coordinates by hand.
+window.ntcApplySuggested = async function (id) {
+  const item = resultById(id);
+  if (!item || item.group_lat == null) return;
+  if (!confirm('Set ' + (item.license_no || ('#' + id)) + '\'s coordinates to the suggested location (' + item.group_lat.toFixed(5) + ', ' + item.group_lng.toFixed(5) + ')?')) return;
+  const la = decToDms(item.group_lat), lo = decToDms(item.group_lng);
+  try {
+    const r = await window.ntcFetchJSON('/api/licenses/' + id, {
+      method: 'PUT',
+      body: JSON.stringify({
+        nlat_deg: String(la.deg), nlat_min: String(la.min), nlat_sec: String(la.sec),
+        elong_deg: String(lo.deg), elong_min: String(lo.min), elong_sec: String(lo.sec),
+      }),
+    });
+    if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not apply the suggested location.', true); return; }
+    window.ntcToast('Location updated for ' + (item.license_no || ('#' + id)) + '.');
+    PREVIEW_IDS = PREVIEW_IDS.filter(function (x) { return x !== id; });
+    PENDING.delete(id);
+    loadLocationCheck();
+  } catch (e) {
+    window.ntcToast('Could not reach the server — nothing was changed.', true);
+  }
+};
 
 document.getElementById('radius-select').addEventListener('change', loadLocationCheck);
 document.getElementById('btn-refresh').addEventListener('click', function (evt) {
