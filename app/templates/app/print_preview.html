@@ -48,6 +48,7 @@
 
   <!-- floating box-editor mini toolbar (design mode only) -->
   <div id="ppv-box-toolbar" class="no-print hidden fixed z-30 bg-gray-800 text-white rounded-md shadow-lg px-2 py-1.5 flex items-center gap-2 text-xs">
+    <span id="ppv-toolbar-handle" class="text-gray-400 hover:text-white px-0.5 -ml-1 select-none" style="cursor:move;" title="Drag to move this bar out of the way">&#10021;</span>
     <select id="ppv-font-family" class="bg-gray-700 text-white rounded px-1.5 py-1 text-xs border-none">
       <option value="Helvetica">Sans-serif</option>
       <option value="Times-Roman">Serif</option>
@@ -269,6 +270,27 @@
     boxToolbar.style.left = (r.left + window.scrollX) + 'px';
     boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
   }
+
+  // ---- the floating box toolbar can be dragged out of the way (e.g. when
+  // it sits right on top of the certificate text it's editing) using the
+  // small handle at its left edge. It snaps back to sitting above whatever
+  // box you select next -- this only moves it out of the way for the box
+  // you're currently working on.
+  let tbDrag = null;
+  document.getElementById('ppv-toolbar-handle').addEventListener('mousedown', function (evt) {
+    const r = boxToolbar.getBoundingClientRect();
+    tbDrag = {
+      startX: evt.clientX, startY: evt.clientY,
+      startLeft: r.left + window.scrollX, startTop: r.top + window.scrollY,
+    };
+    evt.preventDefault();
+  });
+  document.addEventListener('mousemove', function (evt) {
+    if (!tbDrag) return;
+    boxToolbar.style.left = (tbDrag.startLeft + evt.clientX - tbDrag.startX) + 'px';
+    boxToolbar.style.top = (tbDrag.startTop + evt.clientY - tbDrag.startY) + 'px';
+  });
+  document.addEventListener('mouseup', function () { tbDrag = null; });
 
   function selectBox(el) {
     if (SELECTED_BOX) SELECTED_BOX.classList.remove('selected');
