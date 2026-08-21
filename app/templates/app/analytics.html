@@ -1,0 +1,229 @@
+{% extends "app/_shell.html" %}
+{% block title %}Analytics — NTC{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block page_subtitle %}Current-status breakdown and cross-tab pivots across all licenses.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Analytics</li>
+{% endblock %}
+
+{% block app_content %}
+
+<div class="flex gap-1 mb-4 border-b border-gray-200">
+  <button class="an-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-700" data-tab="detail">Detail</button>
+  <button class="an-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="pivot">Pivot</button>
+</div>
+
+<!-- ============================== DETAIL TAB ============================== -->
+<div id="an-tab-detail" class="an-tab">
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="rounded-md shadow-sm bg-cyan-500 text-white p-4">
+      <p class="text-3xl font-bold leading-none" id="an-total">&hellip;</p>
+      <p class="text-sm mt-1 opacity-90">Unique Licenses</p>
+    </div>
+    <div class="rounded-md shadow-sm bg-emerald-500 text-white p-4">
+      <p class="text-3xl font-bold leading-none" id="an-renewed">&hellip;</p>
+      <p class="text-sm mt-1 opacity-90">Renewed</p>
+    </div>
+    <div class="rounded-md shadow-sm bg-red-500 text-white p-4">
+      <p class="text-3xl font-bold leading-none" id="an-expired">&hellip;</p>
+      <p class="text-sm mt-1 opacity-90">Expired</p>
+    </div>
+  </div>
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Detail</h2>
+      <button id="btn-export-detail" class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Export .xlsx</button>
+    </div>
+    <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead class="sticky top-0 bg-gray-50">
+          <tr class="text-left border-b border-gray-200">
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Tech</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Province</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Validity To</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
+          </tr>
+        </thead>
+        <tbody id="an-detail-body" class="divide-y divide-gray-100">
+          <tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== PIVOT TAB ============================== -->
+<div id="an-tab-pivot" class="an-tab hidden">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+    <div class="p-4 flex flex-wrap items-center gap-3">
+      <label class="text-xs font-medium text-gray-500 uppercase">Rows (Y)</label>
+      <select id="pivot-y" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+        <option value="province">Province</option>
+        <option value="town">Municipality</option>
+        <option value="brgy">Barangay</option>
+        <option value="tech">Technology</option>
+      </select>
+      <label class="text-xs font-medium text-gray-500 uppercase">Columns (X)</label>
+      <select id="pivot-x" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+        <option value="tech">Technology</option>
+        <option value="province">Province</option>
+        <option value="town">Municipality</option>
+        <option value="brgy">Barangay</option>
+      </select>
+      <button id="btn-pivot-run" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Run</button>
+      <button id="btn-export-pivot" class="ml-auto text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Export .xlsx</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Cross-tab</h2>
+      <div id="pivot-selection-bar" class="hidden text-xs flex items-center gap-2">
+        <span id="pivot-sel-count" class="text-gray-500"></span>
+        <button id="btn-pivot-export-selected" class="text-brand-600 border border-brand-200 rounded-md px-2 py-1 hover:bg-brand-50">Export Selected</button>
+        <button id="btn-pivot-clear-selected" class="text-gray-400 hover:text-gray-700">Clear</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse" id="pivot-table">
+        <tbody><tr><td class="py-10 text-center text-gray-400 text-sm">Choose axes and click Run.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== OR BATCHES ============================== -->
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">OR Folders</h2>
+    <button id="btn-export-orbatches" class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">Export .xlsx</button>
+  </div>
+  <div id="orb-body" class="p-4 text-sm text-gray-500">Loading&hellip;</div>
+</div>
+
+<script>
+function exportBlob(url, method, filename, btnEl) {
+  window.ntcBusy(btnEl, async function () {
+    try {
+      const res = await window.ntcFetch(url, { method: method || 'POST', headers: {} });
+      if (!res.ok) {
+        let detail = 'Export failed.';
+        try { const b = await res.json(); detail = b.detail || detail; } catch (e2) {}
+        window.ntcToast(detail, true);
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      window.ntcToast('Could not reach the server — export did not complete.', true);
+    }
+  });
+}
+
+// ---- tabs ----
+document.querySelectorAll('.an-tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.an-tab-btn').forEach(function (b) {
+      b.classList.remove('border-brand-500', 'text-brand-700');
+      b.classList.add('border-transparent', 'text-gray-500');
+    });
+    btn.classList.add('border-brand-500', 'text-brand-700');
+    btn.classList.remove('border-transparent', 'text-gray-500');
+    document.querySelectorAll('.an-tab').forEach(function (t) { t.classList.add('hidden'); });
+    document.getElementById('an-tab-' + btn.dataset.tab).classList.remove('hidden');
+  });
+});
+
+// ---- detail ----
+function loadDetail() {
+  window.ntcFetch('/api/analytics').then(function (res) { return res.json(); }).then(function (data) {
+    document.getElementById('an-total').textContent = data.total_unique_licenses ?? '—';
+    document.getElementById('an-renewed').textContent = data.renewed ?? '—';
+    document.getElementById('an-expired').textContent = data.expired ?? '—';
+    const body = document.getElementById('an-detail-body');
+    if (!data.rows || !data.rows.length) { body.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">No data.</td></tr>'; return; }
+    body.innerHTML = data.rows.map(function (r) {
+      const badge = r.status === 'Expired' ? 'bg-red-100 text-red-700' : r.status === 'Renewed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600';
+      return '<tr class="odd:bg-white even:bg-gray-50/60"><td class="py-2 px-4 font-medium text-gray-700">' + window.ntcEsc(r.license_no) + '</td>' +
+        '<td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.licensee) + '</td><td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.tech) + '</td>' +
+        '<td class="py-2 px-4 text-gray-600">' + window.ntcEsc(r.province) + '</td><td class="py-2 px-4 text-gray-500 text-xs">' + window.ntcEsc(r.validity_to) + '</td>' +
+        '<td class="py-2 px-4"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' + badge + '">' + window.ntcEsc(r.status) + '</span></td></tr>';
+    }).join('');
+  }).catch(function () { document.getElementById('an-detail-body').innerHTML = window.ntcErrorState('Could not load analytics.', 'loadDetail', 6); });
+}
+document.getElementById('btn-export-detail').addEventListener('click', function (evt) { exportBlob('/api/analytics/export', 'POST', 'RSL_Analytics.xlsx', evt.currentTarget); });
+
+// ---- pivot ----
+let PIVOT_SEL = new Set();
+function runPivot() {
+  const x = document.getElementById('pivot-x').value, y = document.getElementById('pivot-y').value;
+  if (x === y) { window.ntcToast('Rows and Columns must be different fields.', true); return; }
+  PIVOT_SEL = new Set();
+  updatePivotSelBar();
+  window.ntcFetch('/api/analytics/pivot?x=' + x + '&y=' + y).then(function (res) { return res.json(); }).then(function (data) {
+    const table = document.getElementById('pivot-table');
+    let thead = '<thead class="sticky top-0 bg-gray-50"><tr class="text-left border-b border-gray-200">' +
+      '<th class="py-2 px-3 w-8"></th><th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">' + window.ntcEsc(data.y_label) + '</th>';
+    data.x_vals.forEach(function (xv) { thead += '<th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">' + window.ntcEsc(xv) + '</th>'; });
+    thead += '<th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Total</th></tr></thead>';
+    let tbody = '<tbody class="divide-y divide-gray-100">';
+    data.rows.forEach(function (row) {
+      tbody += '<tr class="odd:bg-white even:bg-gray-50/60"><td class="py-1.5 px-3"><input type="checkbox" class="pivot-row-cb" data-y="' + window.ntcEsc(row.y) + '"></td>' +
+        '<td class="py-1.5 px-3 font-medium text-gray-700">' + window.ntcEsc(row.y) + '</td>';
+      data.x_vals.forEach(function (xv) { tbody += '<td class="py-1.5 px-3 text-right text-gray-600">' + (row.counts[xv] || 0) + '</td>'; });
+      tbody += '<td class="py-1.5 px-3 text-right font-semibold text-gray-800">' + row.total + '</td></tr>';
+    });
+    tbody += '<tr class="bg-gray-50 font-semibold"><td></td><td class="py-1.5 px-3">TOTAL</td>';
+    data.x_vals.forEach(function (xv) { tbody += '<td class="py-1.5 px-3 text-right">' + (data.col_totals[xv] || 0) + '</td>'; });
+    tbody += '<td class="py-1.5 px-3 text-right">' + data.grand_total + '</td></tr></tbody>';
+    table.innerHTML = thead + tbody;
+    document.querySelectorAll('.pivot-row-cb').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        if (cb.checked) PIVOT_SEL.add(cb.dataset.y); else PIVOT_SEL.delete(cb.dataset.y);
+        updatePivotSelBar();
+      });
+    });
+  }).catch(function () { window.ntcToast('Pivot failed — check your connection and click Run again.', true); });
+}
+function updatePivotSelBar() {
+  const bar = document.getElementById('pivot-selection-bar');
+  bar.classList.toggle('hidden', PIVOT_SEL.size === 0);
+  document.getElementById('pivot-sel-count').textContent = PIVOT_SEL.size + ' selected';
+}
+document.getElementById('btn-pivot-run').addEventListener('click', runPivot);
+document.getElementById('btn-export-pivot').addEventListener('click', function (evt) {
+  const x = document.getElementById('pivot-x').value, y = document.getElementById('pivot-y').value;
+  exportBlob('/api/analytics/pivot/export?x=' + x + '&y=' + y, 'POST', 'RSL_Pivot.xlsx', evt.currentTarget);
+});
+document.getElementById('btn-pivot-clear-selected').addEventListener('click', function () {
+  PIVOT_SEL = new Set(); document.querySelectorAll('.pivot-row-cb').forEach(function (cb) { cb.checked = false; }); updatePivotSelBar();
+});
+document.getElementById('btn-pivot-export-selected').addEventListener('click', function (evt) {
+  const y = document.getElementById('pivot-y').value;
+  const values = Array.from(PIVOT_SEL).join(',');
+  exportBlob('/api/analytics/pivot/selected/export?y=' + y + '&values=' + encodeURIComponent(values), 'POST', 'RSL_Pivot_Selected.xlsx', evt.currentTarget);
+});
+
+// ---- OR batches ----
+function loadOrBatches() {
+  window.ntcFetch('/api/or-batches').then(function (res) { return res.json(); }).then(function (data) {
+    const el = document.getElementById('orb-body');
+    if (!data.batches || !data.batches.length) { el.innerHTML = '<p class="text-gray-400">No OR batches yet.</p>'; return; }
+    el.innerHTML = data.batches.map(function (b) {
+      return '<details class="border border-gray-100 rounded-md mb-2">' +
+        '<summary class="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50">OR ' + window.ntcEsc(b.or_no || '—') + ' &middot; ' + window.ntcEsc(b.or_date) + ' &middot; ' + b.count + ' record(s) &middot; &#8369;' + window.ntcEsc(b.or_amount || '0') + '</summary>' +
+        '<div class="p-3 text-sm text-gray-600">' + b.records.map(function (r) { return window.ntcEsc(r.license_no) + ' — ' + window.ntcEsc(r.licensee); }).join('<br>') + '</div></details>';
+    }).join('');
+  }).catch(function () { document.getElementById('orb-body').innerHTML = window.ntcErrorState('Could not load OR Folders.', 'loadOrBatches', 0); });
+}
+document.getElementById('btn-export-orbatches').addEventListener('click', function (evt) { exportBlob('/api/or-batches/export', 'POST', 'RSL_OR_Batches.xlsx', evt.currentTarget); });
+
+loadDetail();
+loadOrBatches();
+</script>
+{% endblock %}

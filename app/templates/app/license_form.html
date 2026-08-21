@@ -72,20 +72,61 @@
       Opens/prints via Excel or Word on the machine running this server — needs Microsoft Excel/Word and only works on Windows.
     </p>
     <div class="flex flex-wrap gap-2">
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'preview')"
+      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'preview', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Preview</button>
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'print')"
+      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'print', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Print</button>
-      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'open')"
+      <button type="button" onclick="ntcPrint('/api/print/{{ lic_id }}', 'open', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Excel: Open</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'preview')"
+      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'preview', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Preview</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'print')"
+      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'print', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Print</button>
-      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'open')"
+      <button type="button" onclick="ntcPrint('/api/print-word/{{ lic_id }}', 'open', this)"
               class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Word: Open</button>
     </div>
   </div>
+</div>
+
+<!-- ============================== PAYMENTS ============================== -->
+<div class="mt-6 bg-white rounded-md shadow-sm border-t-4 border-emerald-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m0-2c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <h2 class="font-medium text-gray-700 text-sm">Payments</h2>
+    </div>
+    <button type="button" id="btn-add-payment" class="text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">+ Add Payment</button>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="text-left bg-gray-50 border-b border-gray-200">
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Year</th>
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">OR No.</th>
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">OR Date</th>
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Amount</th>
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Remarks</th>
+          <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="payments-body" class="divide-y divide-gray-100">
+        <tr><td colspan="6" class="py-6 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================== RENEWAL HISTORY ============================== -->
+<div id="history-panel" class="hidden mt-6 bg-white rounded-md shadow-sm border-t-4 border-orange-500">
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+    <svg class="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <h2 class="font-medium text-gray-700 text-sm">Renewal History</h2>
+  </div>
+  <div class="p-4" id="history-body"></div>
 </div>
 {% endif %}
 
@@ -99,53 +140,131 @@ function showStatus(msg, isError) {
   statusBox.classList.add(isError ? 'bg-red-50' : 'bg-green-50', isError ? 'text-red-600' : 'text-green-700');
 }
 
-document.getElementById('license-form').addEventListener('submit', async function (e) {
+document.getElementById('license-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target).entries());
-  try {
-    const res = await window.ntcFetch(
-      LIC_ID ? '/api/licenses/' + LIC_ID : '/api/licenses',
-      { method: LIC_ID ? 'PUT' : 'POST', body: JSON.stringify(data) }
-    );
-    const body = await res.json();
-    if (!res.ok) {
-      showStatus(body.detail || 'Save failed.', true);
-      return;
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  window.ntcBusy(submitBtn, async function () {
+    try {
+      const r = await window.ntcFetchJSON(
+        LIC_ID ? '/api/licenses/' + LIC_ID : '/api/licenses',
+        { method: LIC_ID ? 'PUT' : 'POST', body: JSON.stringify(data) }
+      );
+      if (!r.ok) {
+        showStatus((r.body && r.body.detail) || 'Save failed. Nothing was changed.', true);
+        return;
+      }
+      if (LIC_ID) {
+        showStatus('Saved.', false);
+      } else {
+        window.location.href = '/app/licenses/' + r.body.id;
+      }
+    } catch (err) {
+      showStatus('Could not reach the server — check your connection and try again. Nothing was saved.', true);
     }
-    if (LIC_ID) {
-      showStatus('Saved.', false);
-    } else {
-      window.location.href = '/app/licenses/' + body.id;
-    }
-  } catch (err) {
-    showStatus('Could not reach the server.', true);
-  }
+  });
 });
 
 {% if lic_id %}
-document.getElementById('btn-delete').addEventListener('click', async function () {
-  if (!confirm('Move this record to Trash? It can be restored later from the classic UI\'s Trash bin.')) return;
-  try {
-    const res = await window.ntcFetch('/api/licenses/{{ lic_id }}', { method: 'DELETE' });
-    const body = await res.json();
-    if (!res.ok) { showStatus(body.detail || 'Delete failed.', true); return; }
-    window.location.href = '/app';
-  } catch (err) {
-    showStatus('Could not reach the server.', true);
-  }
+document.getElementById('btn-delete').addEventListener('click', function (evt) {
+  if (!confirm('Move this record to Trash? It can be restored later from Trash (in the sidebar).')) return;
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/licenses/{{ lic_id }}', { method: 'DELETE' });
+      if (!r.ok) { showStatus((r.body && r.body.detail) || 'Delete failed.', true); return; }
+      window.location.href = '/app';
+    } catch (err) {
+      showStatus('Could not reach the server — record was not deleted.', true);
+    }
+  });
 });
 
-async function ntcPrint(url, mode) {
-  showStatus('Working — ' + mode + '...', false);
-  try {
-    const res = await window.ntcFetch(url + '?mode=' + encodeURIComponent(mode), { method: 'POST' });
-    const body = await res.json();
-    if (!res.ok) { showStatus(body.detail || 'Print failed.', true); return; }
-    showStatus('Done: ' + mode + '.', false);
-  } catch (err) {
-    showStatus('Could not reach the server.', true);
-  }
+async function ntcPrint(url, mode, btnEl) {
+  window.ntcBusy(btnEl, async function () {
+    showStatus('Working — ' + mode + '...', false);
+    try {
+      const r = await window.ntcFetchJSON(url + '?mode=' + encodeURIComponent(mode), { method: 'POST' });
+      if (!r.ok) { showStatus((r.body && r.body.detail) || 'Print failed.', true); return; }
+      showStatus('Done: ' + mode + '.', false);
+    } catch (err) {
+      showStatus('Could not reach the server for printing.', true);
+    }
+  });
 }
+
+// ---- payments ----
+function loadPayments() {
+  const body = document.getElementById('payments-body');
+  window.ntcFetch('/api/licenses/{{ lic_id }}/payments').then(function (res) { return res.json(); }).then(function (rows) {
+    if (!rows || !rows.length) { body.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-gray-400 text-sm">No payments recorded.</td></tr>'; return; }
+    body.innerHTML = rows.map(function (p) {
+      return '<tr class="odd:bg-white even:bg-gray-50/60" data-pid="' + p.id + '">' +
+        '<td class="py-2 px-3"><input class="pay-field w-16 border border-gray-200 rounded px-1.5 py-1 text-sm" data-f="year" value="' + window.ntcEsc(p.year ?? '') + '"></td>' +
+        '<td class="py-2 px-3"><input class="pay-field w-28 border border-gray-200 rounded px-1.5 py-1 text-sm" data-f="or_no" value="' + window.ntcEsc(p.or_no ?? '') + '"></td>' +
+        '<td class="py-2 px-3"><input class="pay-field w-28 border border-gray-200 rounded px-1.5 py-1 text-sm" data-f="or_date" value="' + window.ntcEsc(p.or_date ?? '') + '"></td>' +
+        '<td class="py-2 px-3"><input class="pay-field w-24 border border-gray-200 rounded px-1.5 py-1 text-sm" data-f="or_amount" value="' + window.ntcEsc(p.or_amount ?? '') + '"></td>' +
+        '<td class="py-2 px-3"><input class="pay-field w-full border border-gray-200 rounded px-1.5 py-1 text-sm" data-f="remarks" value="' + window.ntcEsc(p.remarks ?? '') + '"></td>' +
+        '<td class="py-2 px-3 text-right space-x-2 whitespace-nowrap text-xs">' +
+          '<a href="#" class="text-brand-600 hover:underline" onclick="savePayment(' + p.id + ',this);return false;">Save</a>' +
+          '<a href="#" class="text-red-600 hover:underline" onclick="deletePayment(' + p.id + ',this);return false;">Delete</a>' +
+        '</td></tr>';
+    }).join('');
+  }).catch(function () { body.innerHTML = window.ntcErrorState('Could not load payments.', 'loadPayments', 6); });
+}
+window.savePayment = function (pid, el) {
+  const row = document.querySelector('tr[data-pid="' + pid + '"]');
+  const data = {};
+  row.querySelectorAll('.pay-field').forEach(function (inp) { data[inp.dataset.f] = inp.value; });
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/payments/' + pid, { method: 'PUT', body: JSON.stringify(data) });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Save failed.', true); return; }
+      window.ntcToast('Payment saved.');
+    } catch (e) { window.ntcToast('Could not reach the server — payment was not saved.', true); }
+  });
+};
+window.deletePayment = function (pid, el) {
+  if (!confirm('Delete this payment record?')) return;
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/payments/' + pid, { method: 'DELETE' });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Delete failed.', true); return; }
+      window.ntcToast('Payment deleted.');
+      loadPayments();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+};
+document.getElementById('btn-add-payment').addEventListener('click', function (evt) {
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/licenses/{{ lic_id }}/payments', { method: 'POST', body: JSON.stringify({ year: new Date().getFullYear() }) });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Failed.', true); return; }
+      loadPayments();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+});
+loadPayments();
+
+// ---- renewal history ----
+window.ntcFetch('/api/licenses/{{ lic_id }}/history').then(function (res) { return res.json(); }).then(function (data) {
+  const chain = (data.chain || []).concat(data.newer || []);
+  if (!chain.length) return;
+  document.getElementById('history-panel').classList.remove('hidden');
+  document.getElementById('history-body').innerHTML =
+    '<ol class="text-sm text-gray-600 space-y-1">' +
+    (data.chain || []).map(function (r) {
+      const isCurrent = r.id === LIC_ID;
+      return '<li class="' + (isCurrent ? 'font-semibold text-brand-700' : '') + '">' +
+        (isCurrent ? '&#9656; ' : '&nbsp;&nbsp;') +
+        '<a href="/app/licenses/' + r.id + '" class="hover:underline">' + window.ntcEsc(r.license_no || ('#' + r.id)) + '</a>' +
+        ' — validity ' + window.ntcEsc(r.validity_from || '?') + ' to ' + window.ntcEsc(r.validity_to || '?') + (isCurrent ? ' (this record)' : '') + '</li>';
+    }).join('') +
+    (data.newer || []).map(function (r) {
+      return '<li><a href="/app/licenses/' + r.id + '" class="hover:underline">' + window.ntcEsc(r.license_no || ('#' + r.id)) + '</a>' +
+        ' — renewed to validity ' + window.ntcEsc(r.validity_from || '?') + ' to ' + window.ntcEsc(r.validity_to || '?') + '</li>';
+    }).join('') +
+    '</ol>';
+}).catch(function () {});
 {% endif %}
 </script>
 {% endblock %}

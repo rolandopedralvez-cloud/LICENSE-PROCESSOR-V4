@@ -1,0 +1,294 @@
+{% extends "app/_shell.html" %}
+{% block title %}Manage Users — NTC{% endblock %}
+{% block page_title %}Manage Users{% endblock %}
+{% block page_subtitle %}Super Admin only — add accounts, set permissions, review activity.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Users</li>
+{% endblock %}
+
+{% block app_content %}
+
+<div id="not-admin-notice" class="hidden bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-md px-4 py-3 mb-6">
+  This page is only usable by a Super Admin account. You can view it, but every action below will be refused by the server.
+</div>
+
+<div class="flex gap-1 mb-4 border-b border-gray-200">
+  <button class="u-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-700" data-tab="users">Users</button>
+  <button class="u-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="activity">Activity Log</button>
+</div>
+
+<!-- ============================== USERS TAB ============================== -->
+<div id="u-tab-users" class="u-tab">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 id="user-form-title" class="font-medium text-gray-700 text-sm">Add a user</h2>
+      </div>
+      <div class="p-4">
+        <input type="hidden" id="uf-editing" value="">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Username</label>
+            <input id="uf-username" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Role</label>
+            <select id="uf-role" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+              <option value="user">User (permission-based)</option>
+              <option value="super_admin">Super Admin (full access)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Password <span id="uf-pw-note" class="text-gray-400"></span></label>
+            <input id="uf-password" type="password" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">PIN (4 digits, optional)</label>
+            <input id="uf-pin" type="text" maxlength="4" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div id="uf-perms-wrap" class="mb-4">
+          <label class="block text-xs text-gray-500 mb-2">Permissions</label>
+          <div id="uf-perms-grid" class="grid grid-cols-2 gap-1 text-sm"></div>
+        </div>
+        <div class="flex gap-2">
+          <button id="btn-save-user" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Add user</button>
+          <button id="btn-cancel-edit" class="hidden text-gray-400 hover:text-gray-700 text-sm px-2">Cancel edit</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Existing Users</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="text-left bg-gray-50 border-b border-gray-200">
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Username</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Role</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="user-list-body" class="divide-y divide-gray-100">
+            <tr><td colspan="3" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== ACTIVITY LOG TAB ============================== -->
+<div id="u-tab-activity" class="u-tab hidden">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+      <h2 class="font-medium text-gray-700 text-sm">Activity Log</h2>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="text" id="log-lic" placeholder="License no..." class="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-32">
+        <select id="log-user" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm"><option value="">Any user</option></select>
+        <select id="log-action" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          <option value="">Any action</option>
+          <option value="create">Create</option><option value="edit">Edit</option><option value="delete">Delete</option>
+          <option value="restore">Restore</option><option value="purge">Purge</option><option value="import">Import</option>
+          <option value="batch_renew">Batch Renew</option><option value="user_management">User Management</option>
+        </select>
+        <button id="btn-log-filter" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">Filter</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead class="sticky top-0 bg-gray-50">
+          <tr class="text-left border-b border-gray-200">
+            <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Time</th>
+            <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">User</th>
+            <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Action</th>
+            <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+            <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Detail</th>
+          </tr>
+        </thead>
+        <tbody id="log-body" class="divide-y divide-gray-100">
+          <tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+if (window.ntcRole() !== 'super_admin') { document.getElementById('not-admin-notice').classList.remove('hidden'); }
+
+document.querySelectorAll('.u-tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.u-tab-btn').forEach(function (b) { b.classList.remove('border-brand-500', 'text-brand-700'); b.classList.add('border-transparent', 'text-gray-500'); });
+    btn.classList.add('border-brand-500', 'text-brand-700'); btn.classList.remove('border-transparent', 'text-gray-500');
+    document.querySelectorAll('.u-tab').forEach(function (t) { t.classList.add('hidden'); });
+    document.getElementById('u-tab-' + btn.dataset.tab).classList.remove('hidden');
+    if (btn.dataset.tab === 'activity') loadLog();
+  });
+});
+
+let PERMS_CATALOG = [];
+function loadPermsCatalog() {
+  window.ntcFetch('/api/permissions-catalog').then(function (res) { return res.json(); }).then(function (data) {
+    PERMS_CATALOG = data.permissions || [];
+    renderPermsGrid([]);
+  }).catch(function () {});
+}
+function renderPermsGrid(checked) {
+  const set = new Set(checked || []);
+  document.getElementById('uf-perms-grid').innerHTML = PERMS_CATALOG.map(function (p) {
+    return '<label class="flex items-center gap-1.5"><input type="checkbox" class="uf-perm-cb" value="' + p.key + '" ' + (set.has(p.key) ? 'checked' : '') + '> ' + p.label + '</label>';
+  }).join('');
+}
+document.getElementById('uf-role').addEventListener('change', function (e) {
+  document.getElementById('uf-perms-wrap').classList.toggle('hidden', e.target.value === 'super_admin');
+});
+
+// Keyed by username so row action links can look a user's full record back
+// up by a safe data-username attribute instead of embedding it (or a
+// JSON.stringify() of it) directly inside an onclick="..." attribute --
+// a username containing a quote or angle bracket would otherwise break the
+// attribute or inject markup into this list for every admin who views it.
+let USERS_BY_NAME = {};
+
+function loadUsers() {
+  window.ntcFetch('/api/users').then(function (res) { return res.json(); }).then(function (data) {
+    const body = document.getElementById('user-list-body');
+    const userSelect = document.getElementById('log-user');
+    const users = data.users || [];
+    USERS_BY_NAME = {};
+    users.forEach(function (u) { USERS_BY_NAME[u.username] = u; });
+    userSelect.innerHTML = '<option value="">Any user</option>' + users.map(function (u) { return '<option value="' + window.ntcEsc(u.username) + '">' + window.ntcEsc(u.username) + '</option>'; }).join('');
+    if (!users.length) { body.innerHTML = '<tr><td colspan="3" class="py-10 text-center text-gray-400 text-sm">No users yet.</td></tr>'; return; }
+    const me = window.ntcUser();
+    body.innerHTML = users.map(function (u) {
+      const roleBadge = u.role === 'super_admin'
+        ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-100 text-brand-700">Super Admin</span>'
+        : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">User</span>';
+      const pinBadge = u.has_pin ? ' <span class="text-[10px] text-gray-400">PIN set</span>' : '';
+      const isMe = u.username === me;
+      return '<tr class="odd:bg-white even:bg-gray-50/60" data-username="' + window.ntcEsc(u.username) + '"><td class="py-2 px-3 font-medium text-gray-700">' + window.ntcEsc(u.username) + pinBadge + '</td>' +
+        '<td class="py-2 px-3">' + roleBadge + '</td>' +
+        '<td class="py-2 px-3 text-right space-x-2 whitespace-nowrap text-xs">' +
+          '<a href="#" class="text-brand-600 hover:underline" onclick="editUserRow(this);return false;">Edit</a>' +
+          '<a href="#" class="text-amber-600 hover:underline" onclick="clearPin(this);return false;">Clear PIN</a>' +
+          (isMe ? '<span class="text-gray-300" title="Cannot remove your own account">Remove</span>' : '<a href="#" class="text-red-600 hover:underline" onclick="removeUser(this);return false;">Remove</a>') +
+        '</td></tr>';
+    }).join('');
+  }).catch(function () { document.getElementById('user-list-body').innerHTML = window.ntcErrorState('Could not load users (Super Admin only).', 'loadUsers', 3); });
+}
+
+window.editUserRow = function (el) {
+  const username = el.closest('tr').dataset.username;
+  const u = USERS_BY_NAME[username];
+  if (!u) { window.ntcToast('That user record is no longer loaded — refresh and try again.', true); return; }
+  editUser(u);
+};
+
+window.editUser = function (u) {
+  document.getElementById('user-form-title').textContent = 'Edit ' + u.username;
+  document.getElementById('uf-editing').value = u.username;
+  document.getElementById('uf-username').value = u.username;
+  document.getElementById('uf-username').disabled = true;
+  document.getElementById('uf-role').value = u.role;
+  document.getElementById('uf-password').value = '';
+  document.getElementById('uf-pin').value = '';
+  document.getElementById('uf-pw-note').textContent = '(leave blank to keep unchanged)';
+  document.getElementById('uf-perms-wrap').classList.toggle('hidden', u.role === 'super_admin');
+  renderPermsGrid(u.permissions || []);
+  document.getElementById('btn-save-user').textContent = 'Save changes';
+  document.getElementById('btn-cancel-edit').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+document.getElementById('btn-cancel-edit').addEventListener('click', resetUserForm);
+function resetUserForm() {
+  document.getElementById('user-form-title').textContent = 'Add a user';
+  document.getElementById('uf-editing').value = '';
+  document.getElementById('uf-username').value = '';
+  document.getElementById('uf-username').disabled = false;
+  document.getElementById('uf-role').value = 'user';
+  document.getElementById('uf-password').value = '';
+  document.getElementById('uf-pin').value = '';
+  document.getElementById('uf-pw-note').textContent = '';
+  document.getElementById('uf-perms-wrap').classList.remove('hidden');
+  renderPermsGrid([]);
+  document.getElementById('btn-save-user').textContent = 'Add user';
+  document.getElementById('btn-cancel-edit').classList.add('hidden');
+}
+
+document.getElementById('btn-save-user').addEventListener('click', function (evt) {
+  const editing = document.getElementById('uf-editing').value;
+  const username = document.getElementById('uf-username').value.trim();
+  const role = document.getElementById('uf-role').value;
+  const password = document.getElementById('uf-password').value;
+  const pin = document.getElementById('uf-pin').value.trim();
+  if (!username) { window.ntcToast('Username is required.', true); return; }
+  if (!editing && password.length < 4) { window.ntcToast('Password must be at least 4 characters.', true); return; }
+  if (pin && !/^\d{4}$/.test(pin)) { window.ntcToast('PIN must be exactly 4 digits, or left blank.', true); return; }
+  const perms = Array.from(document.querySelectorAll('.uf-perm-cb:checked')).map(function (cb) { return cb.value; });
+  const payload = { username: username, role: role, permissions: perms };
+  if (password) payload.password = password;
+  if (pin) payload.pin = pin;
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Save failed.', true); return; }
+      window.ntcToast('User ' + r.body.action + ': ' + r.body.username + '.');
+      resetUserForm();
+      loadUsers();
+    } catch (e) { window.ntcToast('Could not reach the server — user was not saved.', true); }
+  });
+});
+
+window.clearPin = function (el) {
+  const username = el.closest('tr').dataset.username;
+  if (!confirm('Clear the PIN for ' + username + '?')) return;
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/users/' + encodeURIComponent(username) + '/clear-pin', { method: 'POST' });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Failed.', true); return; }
+      window.ntcToast('PIN cleared.');
+      loadUsers();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+};
+window.removeUser = function (el) {
+  const username = el.closest('tr').dataset.username;
+  if (!confirm('Remove user "' + username + '"? This cannot be undone.')) return;
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/users/' + encodeURIComponent(username), { method: 'DELETE' });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Remove failed.', true); return; }
+      window.ntcToast('User removed.');
+      loadUsers();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+};
+
+function loadLog() {
+  const body = document.getElementById('log-body');
+  const params = new URLSearchParams({
+    license_no: document.getElementById('log-lic').value,
+    username: document.getElementById('log-user').value,
+    action: document.getElementById('log-action').value,
+    limit: 300,
+  });
+  window.ntcFetch('/api/activity-log?' + params.toString()).then(function (res) { return res.json(); }).then(function (data) {
+    if (!data.results || !data.results.length) { body.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">No activity found.</td></tr>'; return; }
+    body.innerHTML = data.results.map(function (r) {
+      return '<tr class="odd:bg-white even:bg-gray-50/60"><td class="py-2 px-3 text-gray-500 text-xs">' + window.ntcEsc(r.ts) + '</td>' +
+        '<td class="py-2 px-3 text-gray-700">' + window.ntcEsc(r.username) + '</td>' +
+        '<td class="py-2 px-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-50 text-brand-700">' + window.ntcEsc(r.action) + '</span></td>' +
+        '<td class="py-2 px-3 text-gray-600">' + window.ntcEsc(r.license_no) + '</td>' +
+        '<td class="py-2 px-3 text-gray-500 text-xs">' + window.ntcEsc(r.detail) + '</td></tr>';
+    }).join('');
+  }).catch(function () { body.innerHTML = window.ntcErrorState('Could not load activity log (Super Admin only).', 'loadLog', 5); });
+}
+document.getElementById('btn-log-filter').addEventListener('click', loadLog);
+
+loadPermsCatalog();
+loadUsers();
+</script>
+{% endblock %}

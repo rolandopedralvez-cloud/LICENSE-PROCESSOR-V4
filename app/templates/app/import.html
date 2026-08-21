@@ -1,0 +1,264 @@
+{% extends "app/_shell.html" %}
+{% block title %}Import Records — NTC{% endblock %}
+{% block page_title %}Import Records{% endblock %}
+{% block page_subtitle %}Bring in records from an Excel export, with duplicate/conflict review before anything is saved.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Import</li>
+{% endblock %}
+
+{% block app_content %}
+
+<!-- ============================== TABS ============================== -->
+<div class="flex gap-1 mb-4 border-b border-gray-200">
+  <button class="import-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-700" data-tab="upload">Upload &amp; Review</button>
+  <button class="import-tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="flags">Flagged Records</button>
+</div>
+
+<!-- ============================== UPLOAD TAB ============================== -->
+<div id="tab-upload" class="import-tab">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/>
+      </svg>
+      <h2 class="font-medium text-gray-700 text-sm">Upload an Excel file</h2>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-400 mb-3">Must be an export from this app (same column layout). Nothing is saved until you review and confirm below.</p>
+      <input type="file" id="import-file" accept=".xlsx,.xls"
+             class="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand-600 file:text-white file:text-sm file:font-medium hover:file:bg-brand-700">
+    </div>
+  </div>
+
+  <div id="import-summary" class="hidden bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Review</h2>
+    </div>
+    <div class="p-4">
+      <p id="import-summary-line" class="text-sm text-gray-700 mb-4"></p>
+      <div class="overflow-x-auto max-h-[28rem] overflow-y-auto border border-gray-100 rounded-md mb-4">
+        <table class="w-full text-sm border-collapse">
+          <thead class="sticky top-0">
+            <tr class="text-left bg-gray-50 border-b border-gray-200">
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Details</th>
+            </tr>
+          </thead>
+          <tbody id="import-review-body" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="btn-import-new-only" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Add new records only</button>
+        <button id="btn-import-all" class="border border-gray-300 rounded-md px-4 py-2 text-sm hover:bg-gray-50">Add everything anyway</button>
+        <button id="btn-import-cancel" class="text-gray-400 hover:text-gray-700 text-sm px-2">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== FLAGGED TAB ============================== -->
+<div id="tab-flags" class="import-tab hidden">
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+      <h2 class="font-medium text-gray-700 text-sm">Flagged Records</h2>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="text" id="flags-q" placeholder="Search..." class="border border-gray-300 rounded-md px-3 py-1.5 text-sm">
+        <select id="flags-status" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          <option value="">All statuses</option>
+          <option value="duplicate">Duplicate</option>
+          <option value="conflict">Conflict</option>
+          <option value="possible_misspelling">Possible misspelling</option>
+          <option value="database_duplicate">Database duplicate</option>
+        </select>
+        <select id="flags-resolved" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          <option value="">Any</option>
+          <option value="false">Unresolved</option>
+          <option value="true">Resolved</option>
+        </select>
+        <button id="btn-flags-rescan" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">Rescan DB</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="text-left bg-gray-50 border-b border-gray-200">
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Flagged</th>
+            <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="flags-body" class="divide-y divide-gray-100">
+          <tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUS_STYLE = {
+  new: 'bg-emerald-100 text-emerald-700',
+  duplicate: 'bg-gray-100 text-gray-600',
+  conflict: 'bg-red-100 text-red-700',
+  possible_misspelling: 'bg-amber-100 text-amber-700',
+  database_duplicate: 'bg-orange-100 text-orange-700',
+};
+function statusBadge(s) {
+  return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' + (STATUS_STYLE[s] || 'bg-gray-100 text-gray-600') + '">' + window.ntcEsc((s || '').replace(/_/g, ' ')) + '</span>';
+}
+
+// ---- tabs ----
+document.querySelectorAll('.import-tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.import-tab-btn').forEach(function (b) {
+      b.classList.remove('border-brand-500', 'text-brand-700');
+      b.classList.add('border-transparent', 'text-gray-500');
+    });
+    btn.classList.add('border-brand-500', 'text-brand-700');
+    btn.classList.remove('border-transparent', 'text-gray-500');
+    document.querySelectorAll('.import-tab').forEach(function (t) { t.classList.add('hidden'); });
+    document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+    if (btn.dataset.tab === 'flags') loadFlags();
+  });
+});
+
+// ---- upload + review ----
+let IMPORT_TOKEN = null, IMPORT_FLAGS = [];
+
+document.getElementById('import-file').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const input = e.target;
+  input.disabled = true; // block re-selecting a file while this one is still being read/uploaded
+  const reader = new FileReader();
+  reader.onerror = function () {
+    window.ntcToast('Could not read that file — it may be corrupted or too large for the browser to load.', true);
+    input.disabled = false;
+  };
+  reader.onload = function () {
+    const b64 = reader.result.split(',')[1];
+    window.ntcFetchJSON('/api/import', { method: 'POST', body: JSON.stringify({ b64: b64, filename: file.name }) })
+      .then(function (r) {
+        input.disabled = false;
+        if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Import preview failed. Make sure this is a .xlsx export from this app.', true); return; }
+        IMPORT_TOKEN = r.body.token;
+        IMPORT_FLAGS = r.body.flags || [];
+        const s = r.body.summary || {};
+        document.getElementById('import-summary-line').textContent =
+          r.body.rows + ' row(s) read — ' + (s.new || 0) + ' new, ' + (s.duplicate || 0) + ' duplicate, ' +
+          (s.conflict || 0) + ' conflict, ' + (s.possible_misspelling || 0) + ' possible misspelling.';
+        document.getElementById('import-review-body').innerHTML = IMPORT_FLAGS.map(function (f, i) {
+          let diffHtml = '';
+          if (f.diff && f.diff.length) {
+            diffHtml = '<table class="text-xs mt-1 w-full"><tbody>' + f.diff.map(function (d) {
+              return '<tr><td class="pr-2 text-gray-400">' + window.ntcEsc(d.label) + '</td><td class="pr-2 text-gray-500">' + window.ntcEsc(d.existing) + '</td><td class="text-gray-700">' + window.ntcEsc(d.incoming) + '</td></tr>';
+            }).join('') + '</tbody></table>';
+          } else if (f.match_confidence) {
+            diffHtml = '<span class="text-xs text-gray-400">Match confidence: ' + Math.round(f.match_confidence * 100) + '%</span>';
+          }
+          return '<tr class="align-top">' +
+            '<td class="py-2 px-3">' + statusBadge(f.status) + '</td>' +
+            '<td class="py-2 px-3 font-medium text-gray-700">' + window.ntcEsc(f.license_no) + '</td>' +
+            '<td class="py-2 px-3 text-gray-600">' + window.ntcEsc(f.licensee) + '</td>' +
+            '<td class="py-2 px-3">' + diffHtml + '</td>' +
+            '</tr>';
+        }).join('');
+        document.getElementById('import-summary').classList.remove('hidden');
+        document.getElementById('import-summary').scrollIntoView({ behavior: 'smooth' });
+      })
+      .catch(function () { input.disabled = false; window.ntcToast('Could not reach the server. Nothing was imported — check your connection and try again.', true); });
+  };
+  reader.readAsDataURL(file);
+});
+
+function commitImport(skipAll, btnEl) {
+  if (!IMPORT_TOKEN) return;
+  const skip_indices = skipAll ? IMPORT_FLAGS.map(function (f, i) { return i; }).filter(function (i) { return IMPORT_FLAGS[i].status !== 'new'; }) : [];
+  window.ntcBusy(btnEl, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/import/commit', { method: 'POST', body: JSON.stringify({ token: IMPORT_TOKEN, skip_indices: skip_indices }) });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Import failed.', true); return; }
+      window.ntcToast(r.body.added + ' record(s) added' + (r.body.skipped ? (', ' + r.body.skipped + ' skipped') : '') + '.');
+      document.getElementById('import-summary').classList.add('hidden');
+      document.getElementById('import-file').value = '';
+      IMPORT_TOKEN = null; IMPORT_FLAGS = [];
+    } catch (e) { window.ntcToast('Could not reach the server. Your file was not committed — check your connection and try again.', true); }
+  });
+}
+document.getElementById('btn-import-new-only').addEventListener('click', function (evt) { commitImport(true, evt.currentTarget); });
+document.getElementById('btn-import-all').addEventListener('click', function (evt) {
+  if (!confirm('Add every row from this file, including duplicates/conflicts/possible misspellings?')) return;
+  commitImport(false, evt.currentTarget);
+});
+document.getElementById('btn-import-cancel').addEventListener('click', function () {
+  document.getElementById('import-summary').classList.add('hidden');
+  document.getElementById('import-file').value = '';
+  IMPORT_TOKEN = null; IMPORT_FLAGS = [];
+});
+
+// ---- flagged records ----
+function loadFlags() {
+  const body = document.getElementById('flags-body');
+  body.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">Loading&hellip;</td></tr>';
+  const params = new URLSearchParams({
+    q: document.getElementById('flags-q').value,
+    status: document.getElementById('flags-status').value,
+    resolved: document.getElementById('flags-resolved').value,
+  });
+  window.ntcFetch('/api/import-flags?' + params.toString()).then(function (res) { return res.json(); }).then(function (data) {
+    if (!data.results || !data.results.length) {
+      body.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-gray-400 text-sm">No flagged records.</td></tr>';
+      return;
+    }
+    body.innerHTML = data.results.map(function (f) {
+      return '<tr class="odd:bg-white even:bg-gray-50/60">' +
+        '<td class="py-2.5 px-4">' + statusBadge(f.status) + '</td>' +
+        '<td class="py-2.5 px-4 font-medium text-gray-700">' + window.ntcEsc(f.license_no) + '</td>' +
+        '<td class="py-2.5 px-4 text-gray-600">' + window.ntcEsc(f.licensee) + '</td>' +
+        '<td class="py-2.5 px-4 text-gray-500 text-xs">' + window.ntcEsc(f.ts) + (f.resolved ? ' &middot; reviewed' : '') + (f.ignored ? ' &middot; ignored' : '') + '</td>' +
+        '<td class="py-2.5 px-4 text-right space-x-2 whitespace-nowrap text-xs">' +
+          '<a href="#" class="text-brand-600 hover:underline" onclick="flagAction(' + f.id + ',\'resolve\',' + (!f.resolved) + ',this);return false;">' + (f.resolved ? 'Un-resolve' : 'Mark reviewed') + '</a>' +
+          '<a href="#" class="text-amber-600 hover:underline" onclick="flagAction(' + f.id + ',\'ignore\',' + (!f.ignored) + ',this);return false;">' + (f.ignored ? 'Un-ignore' : 'Ignore') + '</a>' +
+          '<a href="#" class="text-red-600 hover:underline" onclick="flagDelete(' + f.id + ',this);return false;">Clear</a>' +
+        '</td></tr>';
+    }).join('');
+  }).catch(function () { body.innerHTML = window.ntcErrorState('Could not load flagged records.', 'loadFlags', 5); });
+}
+window.flagAction = function (id, kind, value, el) {
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/import-flags/' + id + '/' + kind, { method: 'POST', body: JSON.stringify(kind === 'resolve' ? { resolved: value } : { ignored: value }) });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Failed.', true); return; }
+      loadFlags();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+};
+window.flagDelete = function (id, el) {
+  if (!confirm('Remove this flag?')) return;
+  window.ntcBusy(el, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/import-flags/' + id, { method: 'DELETE' });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Failed.', true); return; }
+      loadFlags();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+};
+document.getElementById('flags-q').addEventListener('keyup', function (e) { if (e.key === 'Enter') loadFlags(); });
+document.getElementById('flags-status').addEventListener('change', loadFlags);
+document.getElementById('flags-resolved').addEventListener('change', loadFlags);
+document.getElementById('btn-flags-rescan').addEventListener('click', function (evt) {
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/import-flags/rescan', { method: 'POST' });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Rescan failed.', true); return; }
+      window.ntcToast('Rescan complete.');
+      loadFlags();
+    } catch (e) { window.ntcToast('Could not reach the server.', true); }
+  });
+});
+</script>
+{% endblock %}

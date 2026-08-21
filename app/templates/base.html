@@ -111,6 +111,113 @@
       return res;
     };
 
+    // Escapes a value for safe insertion into innerHTML. Every /app/* page
+    // builds its list/table rows by string-concatenating data straight from
+    // the API (licensee names, remarks, site names, filenames, activity-log
+    // detail text, etc.) into innerHTML -- fields a normal user can type
+    // freely. Without escaping, a value containing e.g. "<img src=x
+    // onerror=...>" would execute as real HTML/JS for the next person who
+    // views that list (a classic stored-XSS hole). This is the one place
+    // that escaping happens; every page's row-building code wraps
+    // user-controlled values in this before concatenating them in.
+    // (Static, hardcoded label strings -- "No results.", column headers,
+    // etc. -- don't need it; only values that came from the server/DB do.)
+    window.ntcEsc = function (v) {
+      if (v === null || v === undefined) return '';
+      return String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+    // Safe JSON fetch wrapper built on top of ntcFetch(). Every /app/*
+    // page was previously doing its own "res.json().then(body => ({ok,
+    // body}))" dance, which breaks (uncaught rejection, silent failure)
+    // if the server ever answers with something that isn't valid JSON --
+    // a proxy timeout page, a stack trace from an unrelated 500, an empty
+    // body on a 204, etc. This normalizes all of that into one shape:
+    // { ok, status, body } where body is best-effort-parsed JSON (or null
+    // if there was nothing parseable), and NEVER throws for an HTTP error
+    // status -- only for an actual network failure (server unreachable),
+    // which callers should still wrap in try/catch.
+    window.ntcFetchJSON = async function (url, options) {
+      const res = await window.ntcFetch(url, options);
+      let body = null;
+      try {
+        const text = await res.text();
+        body = text ? JSON.parse(text) : null;
+      } catch (e) {
+        body = null;
+      }
+      return { ok: res.ok, status: res.status, body: body };
+    };
+
+    // Wraps a button's click handler so the button disables itself and
+    // shows a spinner for the duration of an in-flight async action --
+    // prevents double-submits (double-clicking Delete, Save, Batch Renew,
+    // etc. and firing the request twice) across every write action in
+    // the app, not just one page's worth.
+    window.ntcBusy = async function (btn, fn) {
+      if (!btn || btn.disabled || btn.dataset.busy === '1') return; // already running -- ignore the extra click
+      const original = btn.innerHTML;
+      btn.disabled = true; // no-op on <a> tags, harmless
+      btn.dataset.busy = '1'; // the actual guard for non-<button> elements like row action links
+      btn.classList.add('opacity-60', 'cursor-not-allowed', 'pointer-events-none');
+      btn.innerHTML = '<svg class="inline w-3.5 h-3.5 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">' +
+        '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>' +
+        '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>' +
+        original;
+      try {
+        await fn();
+      } finally {
+        btn.disabled = false;
+        delete btn.dataset.busy;
+        btn.classList.remove('opacity-60', 'cursor-not-allowed', 'pointer-events-none');
+        btn.innerHTML = original;
+      }
+    };
+
+    // Renders a standard "couldn't load this, here's why, try again" state
+    // inside any container -- used by every list-loading page (Trash,
+    // Users, Activity Log, Import Flags, Scan Quarantine, Location Check,
+    // Analytics, OR Batches...) instead of each one hand-rolling its own
+    // dead-end error text with no way to recover except a full page reload.
+    // colspan=0 renders a plain block (for non-table containers); pass the
+    // table's column count otherwise so the row spans correctly.
+    window.ntcErrorState = function (message, retryFnName, colspan) {
+      const btn = '<button onclick="' + retryFnName + '()" ' +
+        'class="mt-2 text-xs font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1 hover:bg-brand-50">Retry</button>';
+      const inner = '<div class="py-8 text-center text-red-500 text-sm">' + message + '<br>' + btn + '</div>';
+      if (colspan) return '<tr><td colspan="' + colspan + '">' + inner + '</td></tr>';
+      return inner;
+    };
+
+    // Small shared toast helper so every /app/* page can show a
+    // success/error message the same way without re-implementing it.
+    // Not tied to any one feature -- used across Users, Import, Scan
+    // Review, Trash, Batch Renew, etc.
+    window.ntcToast = function (msg, isError) {
+      let box = document.getElementById("ntc-toast");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "ntc-toast";
+        box.className = "fixed bottom-4 right-4 z-50 flex flex-col gap-2 items-end";
+        document.body.appendChild(box);
+      }
+      const el = document.createElement("div");
+      el.className = "px-4 py-2.5 rounded-md shadow-lg text-sm font-medium text-white max-w-sm " +
+        (isError ? "bg-red-600" : "bg-emerald-600");
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(function () {
+        el.style.transition = "opacity .3s ease";
+        el.style.opacity = "0";
+        setTimeout(function () { el.remove(); }, 300);
+      }, 3200);
+    };
+
     document.addEventListener("htmx:configRequest", function (evt) {
       const t = window.ntcToken();
       if (t) evt.detail.headers["Authorization"] = "Bearer " + t;

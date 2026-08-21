@@ -1,0 +1,239 @@
+{% extends "app/_shell.html" %}
+{% block title %}Batch Renew — NTC{% endblock %}
+{% block page_title %}Batch Renew{% endblock %}
+{% block page_subtitle %}Renew several licenses at once under one OR number.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Batch Renew</li>
+{% endblock %}
+
+{% block app_content %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- ============================== PICK RECORDS ============================== -->
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <h2 class="font-medium text-gray-700 text-sm">1. Pick Records</h2>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-400 mb-3">Search and check the records you want to renew together, or open an existing <a href="#" onclick="showOrBatches();return false;" class="text-brand-600 hover:underline">OR Folder</a> below to reuse a past batch.</p>
+      <div class="relative mb-3">
+        <input type="text" id="batch-search" placeholder="Search licensee, license no., or site name..."
+               class="w-full border border-gray-300 rounded-md pl-3 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="overflow-x-auto max-h-96 overflow-y-auto border border-gray-100 rounded-md">
+        <table class="w-full text-sm border-collapse">
+          <thead class="sticky top-0">
+            <tr class="text-left bg-gray-50 border-b border-gray-200">
+              <th class="py-2 px-3 w-8"></th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
+              <th class="py-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Validity To</th>
+            </tr>
+          </thead>
+          <tbody id="batch-search-body" class="divide-y divide-gray-100">
+            <tr><td colspan="4" class="py-6 text-center text-gray-400 text-sm">Search to see records.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== SELECTED + OR FORM ============================== -->
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-emerald-500">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+        <h2 class="font-medium text-gray-700 text-sm">2. Selected <span id="sel-count" class="text-gray-400 font-normal">(0)</span></h2>
+      </div>
+      <button id="btn-clear-sel" class="text-xs text-gray-400 hover:text-gray-700">Clear</button>
+    </div>
+    <div class="p-4">
+      <ul id="sel-list" class="text-sm text-gray-600 space-y-1 mb-4 max-h-32 overflow-y-auto"></ul>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">OR Number</label>
+          <input id="or-no" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">OR Date</label>
+          <input id="or-date" type="date" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">OR Amount</label>
+          <input id="or-amount" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">RSL Date</label>
+          <input type="text" disabled value="Same as OR Date above" class="w-full border border-gray-200 bg-gray-50 text-gray-400 rounded-md px-3 py-2 text-sm">
+        </div>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">Validity dates roll forward automatically by exactly one year from each record's current validity.</p>
+
+      <div class="space-y-2 mb-4">
+        <label class="flex items-start gap-2 text-sm">
+          <input type="radio" name="mode" value="new" checked class="mt-0.5">
+          <span><span class="font-medium">Create new renewed records</span> <span class="text-xs text-emerald-600">(recommended)</span> — keeps full history, originals move nowhere.</span>
+        </label>
+        <label class="flex items-start gap-2 text-sm">
+          <input type="radio" name="mode" value="overwrite" class="mt-0.5">
+          <span><span class="font-medium">Overwrite the existing records</span> — updates them in place, no history row created.</span>
+        </label>
+      </div>
+
+      <button id="btn-submit-batch" class="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2.5 text-sm font-medium">
+        Renew Selected Records
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== OR BATCHES (folder browser) ============================== -->
+<div id="or-batches-panel" class="hidden mt-6 bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">OR Folders (past batches)</h2>
+    <button onclick="document.getElementById('or-batches-panel').classList.add('hidden')" class="text-xs text-gray-400 hover:text-gray-700">Close</button>
+  </div>
+  <div id="or-batches-body" class="p-4 text-sm text-gray-500">Loading&hellip;</div>
+</div>
+
+<script>
+let SEL = new Map(); // id -> {license_no, licensee, validity_to}
+
+function renderSelected() {
+  document.getElementById('sel-count').textContent = '(' + SEL.size + ')';
+  document.getElementById('sel-list').innerHTML = Array.from(SEL.values()).map(function (r) {
+    return '<li class="flex items-center justify-between"><span>' + window.ntcEsc(r.license_no || '#') + ' — ' + window.ntcEsc(r.licensee) + '</span>' +
+      '<a href="#" onclick="toggleSel(' + r.id + ',null,null,null);return false;" class="text-red-500 text-xs">remove</a></li>';
+  }).join('') || '<li class="text-gray-400">Nothing selected yet.</li>';
+  document.querySelectorAll('.batch-row-checkbox').forEach(function (cb) {
+    cb.checked = SEL.has(Number(cb.dataset.id));
+  });
+}
+
+window.toggleSel = function (id, license_no, licensee, validity_to) {
+  if (SEL.has(id)) { SEL.delete(id); }
+  else { SEL.set(id, { id: id, license_no: license_no, licensee: licensee, validity_to: validity_to }); }
+  renderSelected();
+};
+
+document.getElementById('btn-clear-sel').addEventListener('click', function () { SEL = new Map(); renderSelected(); });
+
+let searchTimer;
+document.getElementById('batch-search').addEventListener('keyup', function (e) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function () { lastBatchSearchQ = e.target.value; runBatchSearch(e.target.value); }, 300);
+});
+
+function runBatchSearch(q) {
+  const body = document.getElementById('batch-search-body');
+  window.ntcFetch('/app/licenses/results?q=' + encodeURIComponent(q || ''), { headers: {} }).then(function (res) {
+    return res.text();
+  }).then(function (html) {
+    // Reuse the existing HTML rows endpoint, then re-parse it into checkbox rows
+    // client-side rather than duplicating the search backend.
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const rows = tmp.querySelectorAll('tbody tr');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-gray-400 text-sm">No results.</td></tr>';
+      return;
+    }
+    body.innerHTML = '';
+    rows.forEach(function (row) {
+      const link = row.querySelector('a[href^="/app/licenses/"]');
+      if (!link) return;
+      const id = Number(link.getAttribute('href').split('/').pop());
+      const cells = row.querySelectorAll('td');
+      const lic_no = cells[0] ? cells[0].textContent.trim() : '';
+      const licensee = cells[1] ? cells[1].textContent.trim() : '';
+      const tr = document.createElement('tr');
+      tr.className = 'odd:bg-white even:bg-gray-50/60 hover:bg-brand-50';
+      tr.innerHTML = '<td class="py-2 px-3"><input type="checkbox" class="batch-row-checkbox" data-id="' + id + '"></td>' +
+        '<td class="py-2 px-3 font-medium text-gray-700">' + window.ntcEsc(lic_no) + '</td>' +
+        '<td class="py-2 px-3 text-gray-600">' + window.ntcEsc(licensee) + '</td>' +
+        '<td class="py-2 px-3 text-gray-500 text-xs">—</td>';
+      tr.querySelector('.batch-row-checkbox').addEventListener('change', function () {
+        window.toggleSel(id, lic_no, licensee, null);
+      });
+      body.appendChild(tr);
+    });
+    renderSelected();
+  }).catch(function () {
+    body.innerHTML = window.ntcErrorState('Search failed.', 'lastBatchSearch', 4);
+  });
+}
+let lastBatchSearchQ = '';
+function lastBatchSearch() { runBatchSearch(lastBatchSearchQ); }
+
+document.getElementById('btn-submit-batch').addEventListener('click', function (evt) {
+  if (!SEL.size) { window.ntcToast('Select at least one record first.', true); return; }
+  const or_no = document.getElementById('or-no').value.trim();
+  const or_date = document.getElementById('or-date').value;
+  const or_amount = document.getElementById('or-amount').value.trim();
+  if (!or_no || !or_date) { window.ntcToast('OR Number and OR Date are required.', true); return; }
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  if (mode === 'overwrite' && !confirm('Overwrite mode updates the ' + SEL.size + ' selected record(s) in place with no history row. Continue?')) return;
+
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const r = await window.ntcFetchJSON('/api/batch/renew', {
+        method: 'POST',
+        body: JSON.stringify({
+          source_ids: Array.from(SEL.keys()),
+          shared: { or_no: or_no, or_date: or_date, or_amount: or_amount },
+          mode: mode,
+        }),
+      });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Batch renew failed. Nothing was changed.', true); return; }
+      window.ntcToast(mode === 'overwrite'
+        ? (r.body.renewed + ' record(s) updated in place.')
+        : (r.body.renewed + ' new renewed record(s) created.'));
+      SEL = new Map();
+      renderSelected();
+      document.getElementById('batch-search-body').innerHTML = '<tr><td colspan="4" class="py-6 text-center text-gray-400 text-sm">Search to see records.</td></tr>';
+    } catch (e) {
+      window.ntcToast('Could not reach the server — the request may or may not have gone through. Check the OR Folders list below before retrying, to avoid renewing these records twice.', true);
+    }
+  });
+});
+
+function showOrBatches() {
+  const panel = document.getElementById('or-batches-panel');
+  panel.classList.remove('hidden');
+  panel.scrollIntoView({ behavior: 'smooth' });
+  window.ntcFetch('/api/or-batches').then(function (res) { return res.json(); }).then(function (data) {
+    const el = document.getElementById('or-batches-body');
+    if (!data.batches || !data.batches.length) {
+      el.innerHTML = '<p class="text-gray-400">No past batches yet.</p>';
+      return;
+    }
+    el.innerHTML = data.batches.map(function (b, i) {
+      const rowsHtml = b.records.map(function (r) {
+        return '<label class="flex items-center gap-2 py-1 text-sm"><input type="checkbox" class="or-batch-pick" data-batch="' + i + '" data-id="' + r.id + '" data-lic="' + window.ntcEsc(r.license_no) + '" data-name="' + window.ntcEsc(r.licensee) + '">' +
+          window.ntcEsc(r.license_no) + ' — ' + window.ntcEsc(r.licensee) + '</label>';
+      }).join('');
+      return '<details class="border border-gray-100 rounded-md mb-2">' +
+        '<summary class="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50">OR ' + window.ntcEsc(b.or_no || '—') + ' &middot; ' + window.ntcEsc(b.or_date) + ' &middot; ' + b.count + ' record(s)</summary>' +
+        '<div class="p-3">' + rowsHtml + '</div></details>';
+    }).join('');
+    document.querySelectorAll('.or-batch-pick').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        if (cb.checked) window.toggleSel(Number(cb.dataset.id), cb.dataset.lic, cb.dataset.name, null);
+        else window.toggleSel(Number(cb.dataset.id));
+      });
+    });
+  }).catch(function () {
+    document.getElementById('or-batches-body').innerHTML = window.ntcErrorState('Could not load OR Folders.', 'showOrBatches', 0);
+  });
+}
+
+renderSelected();
+</script>
+{% endblock %}
