@@ -3,6 +3,10 @@ feature (see app/legacy/print_builtin.py for the "why"). Separate from
 app/routers/print.py, which still runs the original Excel/Word print flow
 unchanged -- this is purely additive.
 """
+import io
+import re
+import zipfile
+
 from fastapi import APIRouter, HTTPException, Body, Request, Response
 
 from app.core import require_permission
@@ -61,4 +65,54 @@ def get_print_pdf(lic_id: int, request: Request):
     return Response(
         content=pdf_bytes, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="License_{lic_id}.pdf"'},
+    )
+
+
+@router.get("/api/print-pdf-batch")
+def get_print_pdf_batch(ids: str, request: Request):
+    """Mass Print for Batch Review -- one PDF per selected record, all
+    packaged into a single ZIP so the user gets one download instead of
+    triggering N separate browser downloads."""
+    require_permission(request, "can_print")
+    id_list = []
+    for piece in ids.split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        try:
+            id_list.append(int(piece))
+        except ValueError:
+            continue
+    if not id_list:
+        raise HTTPException(400, "No record ids given")
+
+    zip_buf = io.BytesIO()
+    used_names = set()
+    added = 0
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for lic_id in id_list:
+            try:
+                pdf_bytes = print_builtin.build_pdf(lic_id)
+            except Exception:
+                continue
+            if pdf_bytes is None:
+                continue
+            record = print_builtin.fetch_record(lic_id)
+            license_no = (record or {}).get("license_no") or f"License_{lic_id}"
+            safe_name = re.sub(r'[\\/:*?"<>|]', "_", str(license_no)).strip() or f"License_{lic_id}"
+            name = f"{safe_name}.pdf"
+            n = 2
+            while name in used_names:
+                name = f"{safe_name}_{n}.pdf"
+                n += 1
+            used_names.add(name)
+            zf.writestr(name, pdf_bytes)
+            added += 1
+
+    if added == 0:
+        raise HTTPException(404, "None of the given records could be found")
+
+    return Response(
+        content=zip_buf.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="Batch_Print.zip"'},
     )

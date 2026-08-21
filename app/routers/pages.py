@@ -225,6 +225,18 @@ def app_batch_renew(request: Request, _user=Depends(require_login)):
     return templates.TemplateResponse(request, "app/batch_renew.html", {})
 
 
+@router.get("/app/batch-review")
+def app_batch_review(request: Request, _user=Depends(require_login)):
+    """Batch Review -- the 'locked' multi-record review/print screen reached
+    from Batch Renew. The list of record ids to review travels via
+    sessionStorage (set by batch_renew.html just before it navigates here),
+    not a query string, so this route needs nothing from the server beyond
+    the shell and the shared FORM_SECTIONS the edit form already uses."""
+    return templates.TemplateResponse(
+        request, "app/batch_review.html", {"sections": FORM_SECTIONS},
+    )
+
+
 @router.get("/app/import")
 def app_import(request: Request, _user=Depends(require_login)):
     return templates.TemplateResponse(request, "app/import.html", {})

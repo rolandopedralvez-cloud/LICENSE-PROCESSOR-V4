@@ -1,0 +1,586 @@
+{% extends "app/_shell.html" %}
+{% block title %}Batch Review — NTC{% endblock %}
+{% block page_title %}Batch Review{% endblock %}
+{% block page_subtitle %}Review, edit and verify every record in this batch before mass printing.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/batch-renew" class="hover:text-brand-600">Batch Renew</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Review</li>
+{% endblock %}
+
+{% block app_content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ============================== "NOTHING SELECTED" STATE ============================== -->
+<div id="br-empty" class="hidden bg-white rounded-md shadow-sm border-t-4 border-gray-300 p-8 text-center">
+  <p class="text-gray-500 mb-3">No records were selected for review.</p>
+  <a href="/app/batch-renew" class="text-brand-600 hover:underline text-sm">&larr; Go back to Batch Renew and select some records</a>
+</div>
+
+<div id="br-main" class="hidden">
+
+<!-- ============================== LOCKED BATCH BAR ============================== -->
+<div class="flex items-center justify-between gap-3 mb-4 flex-wrap bg-white rounded-md shadow-sm border-t-4 border-brand-500 px-4 py-3">
+  <div class="flex items-center gap-2 text-sm">
+    <span class="inline-flex items-center gap-1 text-brand-700 font-medium">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+      </svg>
+      Locked batch &mdash; <span id="br-count">0</span> record(s)
+    </span>
+    <span id="br-dirty-flag" class="hidden text-amber-600 text-xs font-medium">&bull; unsaved changes</span>
+  </div>
+  <div class="flex items-center gap-2 text-sm">
+    <button type="button" id="br-mass-print" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Mass Print (ZIP)</button>
+    <button type="button" id="br-save-all" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Save All</button>
+    <a href="#" id="br-exit" class="text-xs text-gray-400 hover:text-gray-700">Exit batch</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
+
+  <!-- ============================== RECORD SWITCHER ============================== -->
+  <div class="xl:col-span-1">
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-gray-400">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Records in this batch</h2>
+      </div>
+      <ul id="br-switcher" class="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto text-sm"></ul>
+    </div>
+  </div>
+
+  <!-- ============================== EDIT FORM + MAP ============================== -->
+  <div class="xl:col-span-2 min-w-0 space-y-5">
+
+    <div id="br-status" class="text-sm hidden px-4 py-2 rounded-md"></div>
+
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+      <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Now reviewing: <span id="br-current-label" class="text-brand-700">&mdash;</span></h2>
+        <div class="flex items-center gap-3 text-xs">
+          <a href="#" id="br-open-full" target="_blank" class="text-brand-600 hover:underline">Full Record &#8599;</a>
+          <a href="#" id="br-open-preview" target="_blank" class="text-brand-600 hover:underline">Live Preview / PDF &#8599;</a>
+        </div>
+      </div>
+      <form id="batch-review-form" class="p-4 space-y-5" onsubmit="return false;">
+        {% for section_name, fields in sections %}
+        <div>
+          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{{ section_name }}</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {% for field, label in fields %}
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">{{ label }}</label>
+              <input id="f_{{ field }}" name="{{ field }}" type="text"
+                     class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </form>
+    </div>
+
+    <!-- ============================== MULTI-PIN MAP ============================== -->
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Station Locations</h2>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-400 mb-3">
+          Click any pin to switch to that record. The <b>highlighted</b> pin is the record you're currently
+          reviewing &mdash; drag it to move it, or edit the Lat/Long fields above; either way updates the other.
+        </p>
+        <div id="br-map" class="rounded-md border border-gray-200" style="height:360px;"></div>
+        <div id="br-map-label" class="text-xs text-gray-500 mt-2">Loading pins&hellip;</div>
+      </div>
+    </div>
+
+    <!-- ============================== OR FOLDER GROUPING ============================== -->
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-emerald-500">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Group Batch Under OR Folder</h2>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-400 mb-3">Once every record's RSL looks correct, Save All first, then group this whole batch under one OR number/date &mdash; same as Batch Renew.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">OR Number</label>
+            <input id="br-or-no" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">OR Date</label>
+            <input id="br-or-date" type="date" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">OR Amount</label>
+            <input id="br-or-amount" type="text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div class="space-y-2 mb-4">
+          <label class="flex items-start gap-2 text-sm">
+            <input type="radio" name="br-mode" value="new" checked class="mt-0.5">
+            <span><span class="font-medium">Create new renewed records</span> <span class="text-xs text-emerald-600">(recommended)</span> — keeps full history.</span>
+          </label>
+          <label class="flex items-start gap-2 text-sm">
+            <input type="radio" name="br-mode" value="overwrite" class="mt-0.5">
+            <span><span class="font-medium">Overwrite the existing records</span> — updates them in place.</span>
+          </label>
+        </div>
+        <button type="button" id="br-submit-batch" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-4 py-2.5 text-sm font-medium">
+          Save All, then Group Under OR Folder
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== LIVE CERTIFICATE PREVIEW ============================== -->
+  <div class="xl:col-span-1 xl:sticky xl:top-4">
+    <div class="bg-white rounded-md shadow-sm border-t-4 border-purple-500">
+      <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <h2 class="font-medium text-gray-700 text-sm">Live Certificate Preview</h2>
+      </div>
+      <div class="p-3">
+        <p class="text-[11px] text-gray-400 mb-2">Updates live as you edit and as you switch between records.</p>
+        <p id="lp-status" class="text-xs text-gray-400 mb-2"></p>
+        <div id="lp-wrap" style="width:100%;overflow:hidden;">
+          <div id="lp-scale" style="transform-origin:top left;">
+            <div id="lp-page" class="relative bg-white border border-gray-200" style="width:612pt;height:792pt;">
+              <img id="lp-stamp" class="absolute pointer-events-none" style="display:none;" alt="">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /grid -->
+</div><!-- /#br-main -->
+
+<script>
+// ============================== LOAD THE LOCKED ID LIST ==============================
+let IDS = [];
+try { IDS = JSON.parse(sessionStorage.getItem('ntc_batch_review_ids') || '[]').map(Number).filter(function (n) { return n > 0; }); } catch (e) { IDS = []; }
+
+if (!IDS.length) {
+  document.getElementById('br-empty').classList.remove('hidden');
+} else {
+  document.getElementById('br-main').classList.remove('hidden');
+  runBatchReview();
+}
+
+function runBatchReview() {
+
+document.getElementById('br-count').textContent = IDS.length;
+
+// WORKING: id -> current (possibly edited) field values, all as strings.
+// ORIGINAL: id -> the value last saved to the server, used to know what's dirty.
+const WORKING = new Map();
+const ORIGINAL = new Map();
+const DIRTY = new Set();
+const LICENSE_NO = new Map();
+const LICENSEE = new Map();
+let CURRENT = IDS[0];
+
+const FIELD_IDS = Array.from(document.querySelectorAll('#batch-review-form [id^="f_"]')).map(function (el) { return el.id.slice(2); });
+const DATE_FIELDS = { rsl_date: 1, old_date: 1, validity_from: 1, validity_to: 1, or_date: 1 };
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function statusEl() { return document.getElementById('br-status'); }
+function showStatus(msg, isError) {
+  const el = statusEl();
+  el.textContent = msg;
+  el.classList.remove('hidden', 'bg-green-50', 'text-green-700', 'bg-red-50', 'text-red-600');
+  el.classList.add(isError ? 'bg-red-50' : 'bg-green-50', isError ? 'text-red-600' : 'text-green-700');
+}
+
+function markDirty(id) {
+  DIRTY.add(id);
+  document.getElementById('br-dirty-flag').classList.remove('hidden');
+  renderSwitcher();
+}
+
+// ============================== LOAD ALL RECORDS ==============================
+Promise.all(IDS.map(function (id) {
+  return window.ntcFetchJSON('/api/licenses/' + id).then(function (r) { return { id: id, r: r }; });
+})).then(function (results) {
+  results.forEach(function (x) {
+    if (!x.r.ok || !x.r.body || !x.r.body.license) return;
+    const lic = x.r.body.license;
+    const vals = {};
+    FIELD_IDS.forEach(function (f) { vals[f] = (lic[f] == null ? '' : String(lic[f])); });
+    WORKING.set(x.id, vals);
+    ORIGINAL.set(x.id, Object.assign({}, vals));
+    LICENSE_NO.set(x.id, lic.license_no || ('#' + x.id));
+    LICENSEE.set(x.id, lic.licensee || '');
+  });
+  if (!WORKING.size) {
+    showStatus('None of the selected records could be loaded.', true);
+    return;
+  }
+  if (!WORKING.has(CURRENT)) CURRENT = Array.from(WORKING.keys())[0];
+  renderSwitcher();
+  loadFormFromWorking(CURRENT);
+  initMap();
+  renderMap();
+  initPreview();
+}).catch(function () {
+  showStatus('Could not reach the server to load these records.', true);
+});
+
+// ============================== RECORD SWITCHER ==============================
+function renderSwitcher() {
+  const ul = document.getElementById('br-switcher');
+  ul.innerHTML = IDS.filter(function (id) { return WORKING.has(id); }).map(function (id) {
+    const active = id === CURRENT;
+    return '<li>' +
+      '<button type="button" data-id="' + id + '" class="br-sw-item w-full text-left px-4 py-2.5 ' +
+      (active ? 'bg-brand-50 border-l-4 border-brand-500' : 'border-l-4 border-transparent hover:bg-gray-50') + '">' +
+      '<div class="font-medium ' + (active ? 'text-brand-700' : 'text-gray-700') + '">' + window.ntcEsc(LICENSE_NO.get(id)) +
+      (DIRTY.has(id) ? ' <span class="text-amber-500 text-xs">&bull; edited</span>' : '') + '</div>' +
+      '<div class="text-xs text-gray-500 truncate">' + window.ntcEsc(LICENSEE.get(id)) + '</div>' +
+      '</button></li>';
+  }).join('');
+  ul.querySelectorAll('.br-sw-item').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchTo(Number(btn.dataset.id)); });
+  });
+}
+
+function switchTo(id) {
+  if (!WORKING.has(id) || id === CURRENT) { if (id === CURRENT) return; }
+  if (!WORKING.has(id)) return;
+  CURRENT = id;
+  loadFormFromWorking(id);
+  renderSwitcher();
+  highlightCurrentPin();
+  renderPreview();
+  document.getElementById('br-current-label').textContent = LICENSE_NO.get(id) + ' — ' + LICENSEE.get(id);
+  document.getElementById('br-open-full').href = '/app/licenses/' + id;
+  document.getElementById('br-open-preview').href = '/app/licenses/' + id + '/print-preview';
+}
+
+function loadFormFromWorking(id) {
+  const vals = WORKING.get(id) || {};
+  FIELD_IDS.forEach(function (f) {
+    const el = document.getElementById('f_' + f);
+    if (el) el.value = vals[f] || '';
+  });
+  document.getElementById('br-current-label').textContent = LICENSE_NO.get(id) + ' — ' + LICENSEE.get(id);
+  document.getElementById('br-open-full').href = '/app/licenses/' + id;
+  document.getElementById('br-open-preview').href = '/app/licenses/' + id + '/print-preview';
+}
+
+// Any edit to any field on the form writes straight into WORKING[CURRENT] and
+// marks that record dirty -- nothing reaches the server until Save All.
+document.getElementById('batch-review-form').addEventListener('input', function (e) {
+  const el = e.target;
+  if (!el.id || el.id.indexOf('f_') !== 0) return;
+  const field = el.id.slice(2);
+  const vals = WORKING.get(CURRENT);
+  if (!vals) return;
+  vals[field] = el.value;
+  markDirty(CURRENT);
+  if (['nlat_deg', 'nlat_min', 'nlat_sec', 'elong_deg', 'elong_min', 'elong_sec'].indexOf(field) !== -1) {
+    movePinFromFields();
+  }
+  scheduleRender();
+});
+
+// ============================== MULTI-PIN MAP (bidirectional) ==============================
+let brMap = null, markers = new Map(); // id -> L.Marker
+
+function dmsToDec(d, m, s) {
+  const dv = parseFloat(d) || 0, mv = parseFloat(m) || 0, sv = parseFloat(s) || 0;
+  return dv + mv / 60 + sv / 3600;
+}
+function decToDms(dec) {
+  dec = Math.abs(dec);
+  let deg = Math.floor(dec);
+  let mf = (dec - deg) * 60;
+  let min = Math.floor(mf);
+  let sec = Math.round((mf - min) * 60 * 100) / 100;
+  if (sec >= 60) { sec -= 60; min += 1; }
+  if (min >= 60) { min -= 60; deg += 1; }
+  return { deg: deg, min: min, sec: sec };
+}
+function recordCoords(id) {
+  const v = WORKING.get(id) || {};
+  return { lat: dmsToDec(v.nlat_deg, v.nlat_min, v.nlat_sec), lng: dmsToDec(v.elong_deg, v.elong_min, v.elong_sec) };
+}
+
+function initMap() {
+  if (brMap || !window.L) return;
+  brMap = L.map('br-map', { zoomControl: true }).setView([16.9, 121.6], 7);
+  const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri World Imagery' });
+  streets.addTo(brMap);
+  L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(brMap);
+}
+
+function pinIcon(active) {
+  const color = active ? '#7c3aed' : '#9AA5B1';
+  const size = active ? 24 : 16;
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50% 50% 50% 0;background:' + color +
+          ';transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+    iconSize: [size, size], iconAnchor: [size / 2, size - 1], popupAnchor: [0, -size + 2],
+  });
+}
+
+function renderMap() {
+  if (!brMap) return;
+  markers.forEach(function (m) { brMap.removeLayer(m); });
+  markers = new Map();
+  const bounds = [];
+  WORKING.forEach(function (vals, id) {
+    const c = recordCoords(id);
+    if (!(c.lat > 0 && c.lng > 0)) return;
+    const m = L.marker([c.lat, c.lng], { icon: pinIcon(id === CURRENT), draggable: id === CURRENT });
+    m.on('click', function () { switchTo(id); });
+    if (id === CURRENT) {
+      m.on('dragend', function () {
+        const p = m.getLatLng();
+        writeCoordFieldsToWorking(id, p.lat, p.lng);
+      });
+    }
+    m.bindTooltip(LICENSE_NO.get(id) || ('#' + id), { direction: 'top', offset: [0, -14] });
+    m.addTo(brMap);
+    markers.set(id, m);
+    bounds.push([c.lat, c.lng]);
+  });
+  const lbl = document.getElementById('br-map-label');
+  if (!bounds.length) lbl.textContent = 'None of these records have coordinates set yet.';
+  else lbl.textContent = bounds.length + ' of ' + WORKING.size + ' record(s) pinned.';
+  if (bounds.length > 1) brMap.fitBounds(bounds, { padding: [30, 30] });
+  else if (bounds.length === 1) brMap.setView(bounds[0], 14);
+  setTimeout(function () { brMap.invalidateSize(); }, 100);
+}
+
+function highlightCurrentPin() {
+  if (!brMap) return;
+  markers.forEach(function (m, id) {
+    m.setIcon(pinIcon(id === CURRENT));
+    m.dragging && (id === CURRENT ? m.dragging.enable() : m.dragging.disable());
+    m.off('dragend');
+    if (id === CURRENT) {
+      m.on('dragend', function () {
+        const p = m.getLatLng();
+        writeCoordFieldsToWorking(id, p.lat, p.lng);
+      });
+    }
+  });
+  const c = recordCoords(CURRENT);
+  if (c.lat > 0 && c.lng > 0) brMap.panTo([c.lat, c.lng]);
+}
+
+// Dragging the current pin -> updates its Lat/Long form fields + WORKING.
+function writeCoordFieldsToWorking(id, lat, lng) {
+  const la = decToDms(lat), lo = decToDms(lng);
+  const vals = WORKING.get(id);
+  vals.nlat_deg = String(la.deg); vals.nlat_min = String(la.min); vals.nlat_sec = String(la.sec);
+  vals.elong_deg = String(lo.deg); vals.elong_min = String(lo.min); vals.elong_sec = String(lo.sec);
+  if (id === CURRENT) {
+    ['nlat_deg', 'nlat_min', 'nlat_sec', 'elong_deg', 'elong_min', 'elong_sec'].forEach(function (f) {
+      const el = document.getElementById('f_' + f);
+      if (el) el.value = vals[f];
+    });
+  }
+  markDirty(id);
+  document.getElementById('br-map-label').textContent = 'Pin at ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+  scheduleRender();
+}
+
+// Editing the Lat/Long fields directly -> moves the current pin (bidirectional).
+function movePinFromFields() {
+  const c = recordCoords(CURRENT);
+  if (!(c.lat > 0 && c.lng > 0)) return;
+  const m = markers.get(CURRENT);
+  if (m) {
+    m.setLatLng([c.lat, c.lng]);
+  } else if (brMap) {
+    renderMap();
+  }
+  document.getElementById('br-map-label').textContent = 'Pin at ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5);
+}
+
+// ============================== LIVE CERTIFICATE PREVIEW ==============================
+const pageEl = document.getElementById('lp-page');
+const wrapEl = document.getElementById('lp-wrap');
+const scaleEl = document.getElementById('lp-scale');
+const lpStatusEl = document.getElementById('lp-status');
+let TEMPLATE = null;
+let renderTimer = null;
+
+function formatDate(v) {
+  if (!v) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (!m) return v;
+  return MONTHS[(+m[2]) - 1] + ' ' + (+m[3]) + ', ' + (+m[1]);
+}
+function fieldsForPreview() {
+  const vals = WORKING.get(CURRENT) || {};
+  const out = {};
+  Object.keys(vals).forEach(function (f) { out[f] = DATE_FIELDS[f] ? formatDate(vals[f]) : vals[f]; });
+  return out;
+}
+function alignToCss(a) { return a === 'center' ? 'center' : a === 'right' ? 'right' : 'left'; }
+function cssFontFamily(font) {
+  if (font === 'Times-Roman') return "'Times New Roman', Times, serif";
+  if (font === 'Courier') return "'Courier New', Courier, monospace";
+  return "Arial, Helvetica, sans-serif";
+}
+function renderBoxText(box, fields) {
+  return box.paragraphs.map(function (p) {
+    const spans = p.runs.map(function (r) {
+      if (r.type === 'br') return '<br>';
+      const text = r.type === 'field' ? (fields[r.field] || '') : (r.text || '');
+      const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
+        ';font-family:' + cssFontFamily(r.font) + ';';
+      return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';
+    }).join('');
+    return '<p style="text-align:' + alignToCss(p.align) + ';margin:0;white-space:pre-wrap;word-break:break-word;">' + spans + '</p>';
+  }).join('');
+}
+function renderPreview() {
+  if (!TEMPLATE || !pageEl) return;
+  const fields = fieldsForPreview();
+  pageEl.querySelectorAll('.lp-box').forEach(function (el) { el.remove(); });
+  (TEMPLATE.boxes || []).forEach(function (box) {
+    const el = document.createElement('div');
+    el.className = 'lp-box';
+    el.style.position = 'absolute';
+    el.style.left = box.x + 'pt'; el.style.top = box.y + 'pt';
+    el.style.width = box.w + 'pt'; el.style.height = box.h + 'pt';
+    el.innerHTML = renderBoxText(box, fields);
+    pageEl.appendChild(el);
+  });
+  const img = document.getElementById('lp-stamp');
+  if (TEMPLATE.image && TEMPLATE.image.data) {
+    img.src = TEMPLATE.image.data;
+    img.style.left = TEMPLATE.image.x + 'pt'; img.style.top = TEMPLATE.image.y + 'pt';
+    img.style.width = TEMPLATE.image.w + 'pt'; img.style.height = TEMPLATE.image.h + 'pt';
+    img.style.display = '';
+  }
+}
+function fitPreview() {
+  const pagePxWidth = 612 * (96 / 72), pagePxHeight = 792 * (96 / 72);
+  const factor = wrapEl.clientWidth / pagePxWidth;
+  scaleEl.style.transform = 'scale(' + factor + ')';
+  wrapEl.style.height = Math.round(pagePxHeight * factor) + 'px';
+}
+window.addEventListener('resize', fitPreview);
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderPreview, 150);
+}
+function initPreview() {
+  window.ntcFetchJSON('/api/print-template').then(function (r) {
+    if (!r.ok) {
+      lpStatusEl.textContent = r.status === 403 ? 'You don\'t have permission to use the print preview.' : 'Could not load the certificate layout.';
+      return;
+    }
+    TEMPLATE = r.body;
+    fitPreview();
+    renderPreview();
+  }).catch(function () { lpStatusEl.textContent = 'Could not reach the server.'; });
+}
+
+// ============================== SAVE ALL ==============================
+function saveAll() {
+  return new Promise(function (resolve) {
+    const dirtyIds = Array.from(DIRTY);
+    if (!dirtyIds.length) { resolve(true); return; }
+    let i = 0;
+    (function next() {
+      if (i >= dirtyIds.length) {
+        DIRTY.clear();
+        document.getElementById('br-dirty-flag').classList.add('hidden');
+        renderSwitcher();
+        resolve(true);
+        return;
+      }
+      const id = dirtyIds[i];
+      showStatus('Saving ' + (i + 1) + ' of ' + dirtyIds.length + '…', false);
+      window.ntcFetchJSON('/api/licenses/' + id, { method: 'PUT', body: JSON.stringify(WORKING.get(id)) })
+        .then(function (r) {
+          if (!r.ok) {
+            showStatus('Record ' + (LICENSE_NO.get(id) || id) + ' failed to save: ' + ((r.body && r.body.detail) || 'unknown error'), true);
+            resolve(false);
+            return;
+          }
+          ORIGINAL.set(id, Object.assign({}, WORKING.get(id)));
+          i++;
+          next();
+        })
+        .catch(function () {
+          showStatus('Could not reach the server while saving ' + (LICENSE_NO.get(id) || id) + '. Some records may not have been saved.', true);
+          resolve(false);
+        });
+    })();
+  });
+}
+
+document.getElementById('br-save-all').addEventListener('click', function (evt) {
+  if (!DIRTY.size) { showStatus('Nothing to save — no records have unsaved edits.', false); return; }
+  window.ntcBusy(evt.currentTarget, async function () {
+    const ok = await saveAll();
+    if (ok) showStatus('All changes saved (' + WORKING.size + ' record(s) in this batch).', false);
+  });
+});
+
+// ============================== OR FOLDER GROUPING ==============================
+document.getElementById('br-submit-batch').addEventListener('click', function (evt) {
+  const or_no = document.getElementById('br-or-no').value.trim();
+  const or_date = document.getElementById('br-or-date').value;
+  const or_amount = document.getElementById('br-or-amount').value.trim();
+  if (!or_no || !or_date) { window.ntcToast('OR Number and OR Date are required.', true); return; }
+  const mode = document.querySelector('input[name="br-mode"]:checked').value;
+  if (mode === 'overwrite' && !confirm('Overwrite mode updates all ' + WORKING.size + ' record(s) in place with no history row. Continue?')) return;
+
+  window.ntcBusy(evt.currentTarget, async function () {
+    const saved = await saveAll();
+    if (!saved) { window.ntcToast('Save All failed — the batch was not grouped under an OR Folder. Fix the error above and try again.', true); return; }
+    try {
+      const r = await window.ntcFetchJSON('/api/batch/renew', {
+        method: 'POST',
+        body: JSON.stringify({ source_ids: Array.from(WORKING.keys()), shared: { or_no: or_no, or_date: or_date, or_amount: or_amount }, mode: mode }),
+      });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Batch renew failed. Nothing was changed.', true); return; }
+      window.ntcToast(mode === 'overwrite' ? (r.body.renewed + ' record(s) updated in place.') : (r.body.renewed + ' new renewed record(s) created.'));
+      sessionStorage.removeItem('ntc_batch_review_ids');
+    } catch (e) {
+      window.ntcToast('Could not reach the server — the request may or may not have gone through. Check the OR Folders list on Batch Renew before retrying.', true);
+    }
+  });
+});
+
+// ============================== MASS PRINT (ZIP) ==============================
+document.getElementById('br-mass-print').addEventListener('click', function (evt) {
+  window.ntcBusy(evt.currentTarget, async function () {
+    try {
+      const res = await window.ntcFetch('/api/print-pdf-batch?ids=' + Array.from(WORKING.keys()).join(','));
+      if (!res.ok) { window.ntcToast('Mass print failed.', true); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'Batch_Print.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.ntcToast('Could not reach the server for mass printing.', true);
+    }
+  });
+});
+
+// ============================== EXIT ==============================
+document.getElementById('br-exit').addEventListener('click', function (e) {
+  e.preventDefault();
+  if (DIRTY.size && !confirm('You have unsaved edits in this batch. Leave without saving?')) return;
+  sessionStorage.removeItem('ntc_batch_review_ids');
+  window.location.href = '/app/batch-renew';
+});
+
+} // /runBatchReview
+</script>
+{% endblock %}

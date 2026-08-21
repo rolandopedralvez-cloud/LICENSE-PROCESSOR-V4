@@ -98,6 +98,10 @@
       <button id="btn-submit-batch" class="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2.5 text-sm font-medium">
         Renew Selected Records
       </button>
+      <button id="btn-review-batch" type="button" class="w-full mt-2 bg-white border border-brand-300 text-brand-600 hover:bg-brand-50 rounded-md px-4 py-2.5 text-sm font-medium">
+        Review &amp; Print Batch &rarr;
+      </button>
+      <p class="text-xs text-gray-400 mt-2">Opens a locked review screen where you can edit, verify and mass-print every selected record before grouping them under an OR Folder.</p>
     </div>
   </div>
   </div>
@@ -300,6 +304,12 @@ document.getElementById('btn-submit-batch').addEventListener('click', function (
       window.ntcToast('Could not reach the server — the request may or may not have gone through. Check the OR Folders list below before retrying, to avoid renewing these records twice.', true);
     }
   });
+});
+
+document.getElementById('btn-review-batch').addEventListener('click', function () {
+  if (!SEL.size) { window.ntcToast('Select at least one record first.', true); return; }
+  sessionStorage.setItem('ntc_batch_review_ids', JSON.stringify(Array.from(SEL.keys())));
+  window.location.href = '/app/batch-review';
 });
 
 function showOrBatches() {
