@@ -41,33 +41,49 @@
     </div>
 
     <!-- nav -->
-    <nav class="flex-1 overflow-y-auto px-3 py-4">
-      <p class="px-2 text-[11px] font-semibold tracking-widest text-gray-500 uppercase mb-2">Main Navigation</p>
-      <ul class="space-y-1 text-sm">
-        <li>
-          <a href="/app"
-             class="flex items-center justify-between gap-2 px-3 py-2 rounded-md border-l-4 transition-colors
-                    {% if request.url.path == '/app' %}bg-white/5 border-brand-500 text-white{% else %}border-transparent text-gray-300 hover:bg-white/5 hover:text-white{% endif %}">
-            <span class="flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h4a1 1 0 001-1v-4a1 1 0 011-1h0a1 1 0 011 1v4a1 1 0 001 1h4a1 1 0 001-1V10"/>
-              </svg>
-              Search / Home
-            </span>
-            <span id="ntc-nav-badge-total"
-                  class="hidden text-[11px] leading-none font-semibold bg-brand-500 text-white rounded-full px-1.5 py-0.5"></span>
-          </a>
-        </li>
-        <li>
-          <a href="/app/licenses/new"
-             class="flex items-center gap-2 px-3 py-2 rounded-md border-l-4 transition-colors
-                    {% if request.url.path == '/app/licenses/new' %}bg-white/5 border-brand-500 text-white{% else %}border-transparent text-gray-300 hover:bg-white/5 hover:text-white{% endif %}">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+    <nav class="flex-1 overflow-y-auto px-3 py-4" id="ntc-nav">
+      {% macro navlink(href, label, icon, badge_id=None) %}
+      <li>
+        <a href="{{ href }}"
+           class="flex items-center justify-between gap-2 px-3 py-2 rounded-md border-l-4 transition-colors
+                  {% if request.url.path == href %}bg-white/5 border-brand-500 text-white{% else %}border-transparent text-gray-300 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-2">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="{{ icon }}"/>
             </svg>
-            New License
-          </a>
-        </li>
+            {{ label }}
+          </span>
+          {% if badge_id %}
+          <span id="{{ badge_id }}"
+                class="hidden text-[11px] leading-none font-semibold bg-brand-500 text-white rounded-full px-1.5 py-0.5"></span>
+          {% endif %}
+        </a>
+      </li>
+      {% endmacro %}
+
+      <p class="px-2 text-[11px] font-semibold tracking-widest text-gray-500 uppercase mb-2">Main Navigation</p>
+      <ul class="space-y-1 text-sm mb-4">
+        {{ navlink('/app', 'Search / Home', 'M3 12l9-9 9 9M5 10v10a1 1 0 001 1h4a1 1 0 001-1v-4a1 1 0 011-1h0a1 1 0 011 1v4a1 1 0 001 1h4a1 1 0 001-1V10', 'ntc-nav-badge-total') }}
+        {{ navlink('/app/licenses/new', 'New License', 'M12 4v16m8-8H4') }}
+        {{ navlink('/app/batch-renew', 'Batch Renew', 'M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0114-5.3M20 14a8 8 0 01-14 5.3') }}
+      </ul>
+
+      <p class="px-2 text-[11px] font-semibold tracking-widest text-gray-500 uppercase mb-2">Data Tools</p>
+      <ul class="space-y-1 text-sm mb-4">
+        {{ navlink('/app/import', 'Import Records', 'M12 4v12m0 0l-4-4m4 4l4-4M4 20h16', 'ntc-nav-badge-flags') }}
+        {{ navlink('/app/scan', 'Scan Review', 'M4 7V5a1 1 0 011-1h2M4 17v2a1 1 0 001 1h2M20 7V5a1 1 0 00-1-1h-2M20 17v2a1 1 0 01-1 1h-2M8 12h8', 'ntc-nav-badge-scan') }}
+        {{ navlink('/app/analytics', 'Analytics', 'M9 19V6l7-3v13M3 21h18M9 10L3 12v9m6-11l7 3', None) }}
+        {{ navlink('/app/location-check', 'Location Check', 'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z') }}
+        {{ navlink('/app/trash', 'Trash', 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', 'ntc-nav-badge-trash') }}
+      </ul>
+
+      <ul class="space-y-1 text-sm mb-4" id="ntc-nav-admin" style="display:none">
+        <p class="px-2 text-[11px] font-semibold tracking-widest text-gray-500 uppercase mb-2">Administration</p>
+        {{ navlink('/app/users', 'Manage Users', 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4') }}
+        {{ navlink('/app/settings', 'Backup Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z') }}
+      </ul>
+
+      <ul class="space-y-1 text-sm">
         <li>
           <a href="/" target="_blank" rel="noopener"
              class="flex items-center gap-2 px-3 py-2 rounded-md border-l-4 border-transparent text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
@@ -137,11 +153,41 @@
               <p class="font-medium truncate" id="ntc-whoami-menu-name">&nbsp;</p>
               <p class="text-xs text-gray-400 truncate" id="ntc-whoami-menu-role">&nbsp;</p>
             </div>
+            <button onclick="window.ntcOpenPinModal()" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set My PIN</button>
             <button onclick="window.ntcLogout()" class="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50">Log out</button>
           </div>
         </div>
       </div>
     </header>
+
+    <!-- "Set My PIN" modal -- lets the signed-in user set/change/clear
+         their own quick-login PIN (used on the PIN sign-in screen as a
+         faster alternative to the full password). Calls the same
+         /api/set-my-pin and /api/clear-my-pin endpoints the classic UI's
+         "Set My PIN" button already uses. -->
+    <div id="ntc-pin-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+      <div class="bg-white rounded-md shadow-lg w-full max-w-sm">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <h2 class="font-medium text-gray-700 text-sm">Set My PIN</h2>
+          <button onclick="window.ntcClosePinModal()" class="text-gray-400 hover:text-gray-700">&times;</button>
+        </div>
+        <div class="p-4">
+          <p class="text-xs text-gray-400 mb-3">A 4-digit PIN lets you sign in quickly on this device instead of typing your full password every time.</p>
+          <label class="block text-xs text-gray-500 mb-1">New PIN (4 digits)</label>
+          <input id="ntc-pin-input" type="text" maxlength="4" inputmode="numeric"
+                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-3">
+          <label class="block text-xs text-gray-500 mb-1">Confirm PIN</label>
+          <input id="ntc-pin-confirm" type="text" maxlength="4" inputmode="numeric"
+                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-1">
+          <p id="ntc-pin-status" class="text-sm mt-2 hidden"></p>
+        </div>
+        <div class="flex flex-wrap gap-2 px-4 py-3 border-t border-gray-100">
+          <button id="ntc-pin-save" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium">Save PIN</button>
+          <button id="ntc-pin-clear" class="border border-red-300 text-red-600 rounded-md px-4 py-2 text-sm hover:bg-red-50">Clear My PIN</button>
+          <button onclick="window.ntcClosePinModal()" class="ml-auto text-gray-400 hover:text-gray-700 text-sm px-2">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <!-- page title bar -->
     <div class="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
@@ -218,12 +264,97 @@
         badge.textContent = data.total_licenses;
         badge.classList.remove('hidden');
       }
+      const trashBadge = document.getElementById('ntc-nav-badge-trash');
+      if (trashBadge && typeof data.trash_count === 'number' && data.trash_count > 0) {
+        trashBadge.textContent = data.trash_count;
+        trashBadge.classList.remove('hidden');
+      }
+    }).catch(function () {});
+  })();
+
+  // Admin-only nav section: only super_admin gets Users/Settings links.
+  // Purely a UI convenience -- every underlying /api/* route still
+  // enforces its own permission check server-side regardless of what
+  // this shows or hides.
+  (function () {
+    if (window.ntcRole() === 'super_admin') {
+      const admin = document.getElementById('ntc-nav-admin');
+      if (admin) admin.style.display = '';
+    }
+  })();
+
+  // Best-effort badge counts for Import (unresolved flags) and Scan
+  // Review (pending scans) -- silently stay hidden on any error, never
+  // block the page.
+  (function () {
+    window.ntcFetch('/api/import-flags?resolved=false&ignored=no&limit=1').then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      const badge = document.getElementById('ntc-nav-badge-flags');
+      if (badge && data && data.total > 0) {
+        badge.textContent = data.total;
+        badge.classList.remove('hidden');
+      }
+    }).catch(function () {});
+    window.ntcFetch('/api/scan/quarantine?status=pending&limit=1').then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      const badge = document.getElementById('ntc-nav-badge-scan');
+      if (badge && data && data.count > 0) {
+        badge.textContent = data.count;
+        badge.classList.remove('hidden');
+      }
     }).catch(function () {});
   })();
 
   // Sidebar search box: jumps to the Search/Home page with the query so
   // the results panel there (the actual search implementation) can pick
   // it up client-side -- no new backend route needed.
+  // ---- Set My PIN modal --------------------------------------------
+  window.ntcOpenPinModal = function () {
+    document.getElementById('ntc-user-menu').classList.add('hidden');
+    document.getElementById('ntc-pin-input').value = '';
+    document.getElementById('ntc-pin-confirm').value = '';
+    const status = document.getElementById('ntc-pin-status');
+    status.classList.add('hidden'); status.textContent = '';
+    document.getElementById('ntc-pin-modal').classList.remove('hidden');
+  };
+  window.ntcClosePinModal = function () {
+    document.getElementById('ntc-pin-modal').classList.add('hidden');
+  };
+  function pinStatus(msg, isError) {
+    const el = document.getElementById('ntc-pin-status');
+    el.textContent = msg;
+    el.className = 'text-sm mt-2 ' + (isError ? 'text-red-600' : 'text-emerald-600');
+  }
+  document.getElementById('ntc-pin-save').addEventListener('click', function (evt) {
+    const pin = document.getElementById('ntc-pin-input').value.trim();
+    const confirmPin = document.getElementById('ntc-pin-confirm').value.trim();
+    if (!/^\d{4}$/.test(pin)) { pinStatus('PIN must be exactly 4 digits.', true); return; }
+    if (pin !== confirmPin) { pinStatus('PINs do not match.', true); return; }
+    window.ntcBusy(evt.currentTarget, async function () {
+      try {
+        const r = await window.ntcFetchJSON('/api/set-my-pin', { method: 'POST', body: JSON.stringify({ pin: pin }) });
+        if (!r.ok) { pinStatus((r.body && r.body.detail) || 'Could not save PIN.', true); return; }
+        pinStatus('PIN saved.', false);
+        window.ntcToast('PIN saved.');
+        setTimeout(window.ntcClosePinModal, 900);
+      } catch (e) { pinStatus('Could not reach the server.', true); }
+    });
+  });
+  document.getElementById('ntc-pin-clear').addEventListener('click', function (evt) {
+    if (!confirm('Remove your PIN? You will need your full password to sign in until you set a new one.')) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      try {
+        const r = await window.ntcFetchJSON('/api/clear-my-pin', { method: 'POST' });
+        if (!r.ok) { pinStatus((r.body && r.body.detail) || 'Could not clear PIN.', true); return; }
+        pinStatus('PIN cleared.', false);
+        window.ntcToast('PIN cleared.');
+        setTimeout(window.ntcClosePinModal, 900);
+      } catch (e) { pinStatus('Could not reach the server.', true); }
+    });
+  });
+
   document.getElementById('ntc-sidebar-search-input').addEventListener('keydown', function (evt) {
     if (evt.key !== 'Enter') return;
     const val = evt.target.value.trim();

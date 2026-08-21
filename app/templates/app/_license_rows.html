@@ -2,6 +2,7 @@
 <table class="w-full text-sm border-collapse">
   <thead>
     <tr class="text-left bg-gray-50 border-b border-gray-200">
+      <th class="py-2.5 px-4 w-8"></th>
       <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">License No.</th>
       <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Licensee</th>
       <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Site</th>
@@ -14,6 +15,9 @@
     {% for lic in results %}
     {% set status_text = (lic.license_status or lic.status or "") %}
     <tr class="odd:bg-white even:bg-gray-50/60 hover:bg-brand-50 transition-colors">
+      <td class="py-2.5 px-4">
+        <input type="checkbox" class="ntc-row-select" data-id="{{ lic.id }}" data-lic="{{ lic.license_no or ('#' ~ lic.id) }}">
+      </td>
       <td class="py-2.5 px-4 font-medium text-gray-700">{{ lic.license_no or "" }}</td>
       <td class="py-2.5 px-4 text-gray-600">{{ lic.licensee or "" }}</td>
       <td class="py-2.5 px-4 text-gray-600">{{ lic.site_name or "" }}</td>
@@ -40,7 +44,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="py-10 text-center text-gray-400 text-sm">No results.</td></tr>
+    <tr><td colspan="7" class="py-10 text-center text-gray-400 text-sm">No results.</td></tr>
     {% endfor %}
   </tbody>
 </table>

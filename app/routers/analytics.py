@@ -458,7 +458,15 @@ def export_records(data: dict = Body(...), request: Request = None):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"RSL_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    # NOTE: this function has its own "from datetime import datetime" above
+    # (shadowing the module-level "import datetime" the rest of this file
+    # uses), so inside THIS function "datetime" is the class, not the
+    # module -- datetime.now(), not datetime.datetime.now(). Using the
+    # module form here (as every other export function in this file does)
+    # crashed this endpoint with AttributeError on every call, a
+    # pre-existing bug that predates the new /app UI -- the classic UI's
+    # "Export All" button called this same endpoint and hit it too.
+    fname = f"RSL_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

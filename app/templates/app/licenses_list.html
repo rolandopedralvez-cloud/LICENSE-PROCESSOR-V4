@@ -114,11 +114,23 @@
 
 <!-- ============================== RESULTS PANEL ============================== -->
 <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
-  <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-    <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/>
-    </svg>
-    <h2 class="font-medium text-gray-700 text-sm">Results</h2>
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/>
+      </svg>
+      <h2 class="font-medium text-gray-700 text-sm">Results</h2>
+    </div>
+    <div class="flex items-center gap-2 text-xs">
+      <button id="btn-export-selected" disabled
+              class="font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+        Export Selected (<span id="export-sel-count">0</span>)
+      </button>
+      <button id="btn-export-all"
+              class="font-medium text-brand-600 border border-brand-200 rounded-md px-3 py-1.5 hover:bg-brand-50">
+        Export All
+      </button>
+    </div>
   </div>
   <div id="results" class="p-1">Loading&hellip;</div>
 </div>
@@ -171,6 +183,75 @@
     const hash = window.location.hash;
     if (hash.indexOf('#q=') === 0) {
       window.ntcApplySearch(decodeURIComponent(hash.slice(3)));
+    }
+  })();
+</script>
+
+<script>
+  // ---- Export All / Export Selected --------------------------------
+  // Mirrors the classic UI's "Export All" and "Export Selected" buttons
+  // (both call the same /api/export endpoint the classic UI already
+  // uses -- no new backend route). Row checkboxes live in
+  // _license_rows.html, which htmx swaps into #results on every search --
+  // event delegation on #results (rather than binding each checkbox
+  // directly) means selections keep working after every swap without
+  // re-binding anything.
+  let EXPORT_SEL = new Set(); // license id -> true
+
+  function updateExportSelBar() {
+    const btn = document.getElementById('btn-export-selected');
+    document.getElementById('export-sel-count').textContent = EXPORT_SEL.size;
+    btn.disabled = EXPORT_SEL.size === 0;
+  }
+
+  document.getElementById('results').addEventListener('change', function (e) {
+    if (!e.target.classList.contains('ntc-row-select')) return;
+    const id = Number(e.target.dataset.id);
+    if (e.target.checked) EXPORT_SEL.add(id); else EXPORT_SEL.delete(id);
+    updateExportSelBar();
+  });
+
+  function downloadExport(body, btnEl) {
+    window.ntcBusy(btnEl, async function () {
+      try {
+        const res = await window.ntcFetch('/api/export', { method: 'POST', body: JSON.stringify(body) });
+        if (!res.ok) {
+          let detail = 'Export failed.';
+          try { const b = await res.json(); detail = b.detail || detail; } catch (e2) {}
+          window.ntcToast(detail, true);
+          return;
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'RSL_Export.xlsx';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (e) {
+        window.ntcToast('Could not reach the server — export did not complete.', true);
+      }
+    });
+  }
+
+  document.getElementById('btn-export-all').addEventListener('click', function (evt) {
+    downloadExport({ all: true }, evt.currentTarget);
+  });
+  document.getElementById('btn-export-selected').addEventListener('click', function (evt) {
+    if (!EXPORT_SEL.size) return;
+    downloadExport({ ids: Array.from(EXPORT_SEL) }, evt.currentTarget);
+  });
+
+  // Same permission the classic UI checks (can_export) -- hides both
+  // buttons for a limited "user" account that wasn't granted it. This is
+  // a convenience only; /api/export itself enforces the real check
+  // server-side regardless of what the button shows.
+  (function () {
+    const role = window.ntcRole();
+    const perms = JSON.parse(localStorage.getItem('ntc_perms') || '[]');
+    const canExport = role === 'super_admin' || perms.includes('can_export');
+    if (!canExport) {
+      document.getElementById('btn-export-all').classList.add('hidden');
+      document.getElementById('btn-export-selected').classList.add('hidden');
     }
   })();
 </script>
