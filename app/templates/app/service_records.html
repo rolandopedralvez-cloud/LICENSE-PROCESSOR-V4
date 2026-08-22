@@ -1,0 +1,265 @@
+{% extends "app/_shell.html" %}
+{% block title %}Records — NTC{% endblock %}
+{% block page_title %}<span id="svc-rec-title">Records</span>{% endblock %}
+{% block page_subtitle %}Applications / records for this service.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Records</li>
+{% endblock %}
+
+{% block app_content %}
+
+<div id="svc-expiring-banner" class="hidden bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-4 py-3 mb-4 text-sm"></div>
+
+<div class="flex items-center gap-2 text-xs flex-wrap mb-3">
+  <a id="svc-design-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Design Fields</a>
+  <a id="svc-board-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Board</a>
+  <a id="svc-map-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Map</a>
+  <a id="svc-analytics-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Analytics</a>
+  <a id="svc-import-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Import</a>
+  <a id="svc-trash-link" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 bg-white">Trash</a>
+  <span class="flex-1"></span>
+  <label class="text-gray-500">Track expiry:</label>
+  <select id="svc-expiry-field" class="border border-gray-300 rounded-md px-2 py-1.5 text-xs bg-white"></select>
+</div>
+
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+    <div class="flex items-center gap-2">
+      <input id="svc-rec-search" type="search" placeholder="Search records..." class="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-56">
+    </div>
+    <div class="flex items-center gap-2 text-xs flex-wrap">
+      <button id="svc-export-cols-btn" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Excel Columns&hellip;</button>
+      <button id="svc-export-btn" class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Export .xlsx</button>
+      <button id="svc-mass-print-btn" disabled class="border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40">Mass Print (<span id="svc-sel-count">0</span>)</button>
+      <a id="svc-new-record-link" class="bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700 font-medium">+ New Record</a>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm border-collapse">
+      <thead class="bg-gray-50">
+        <tr class="text-left border-b border-gray-200">
+          <th class="py-2.5 px-3 w-8"><input type="checkbox" id="svc-rec-select-all"></th>
+          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">#</th>
+          <th id="svc-rec-thead-rest"></th>
+          <th class="py-2.5 px-4"></th>
+        </tr>
+      </thead>
+      <tbody id="svc-rec-tbody">
+        <tr><td colspan="10" class="text-center text-gray-400 py-6">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================== Excel Columns modal ============================== -->
+<div id="excol-modal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-md shadow-lg w-full max-w-sm">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h3 class="font-medium text-gray-700 text-sm">Excel Export Columns</h3>
+      <button id="excol-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-500 mb-2">Check which fields to include, and use the arrows to set the column order.</p>
+      <div id="excol-list" class="space-y-1 text-sm max-h-72 overflow-y-auto"></div>
+    </div>
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+      <button id="excol-cancel" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Cancel</button>
+      <button id="excol-save" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  let SERVICE = null;
+  let RECORDS = [];
+  let PREVIEW_KEYS = [];
+  let EXCOL = [];
+
+  document.getElementById('svc-design-link').href = '/app/services/' + SERVICE_ID + '/design';
+  document.getElementById('svc-board-link').href = '/app/services/' + SERVICE_ID + '/board';
+  document.getElementById('svc-map-link').href = '/app/services/' + SERVICE_ID + '/map';
+  document.getElementById('svc-analytics-link').href = '/app/services/' + SERVICE_ID + '/analytics';
+  document.getElementById('svc-import-link').href = '/app/services/' + SERVICE_ID + '/import';
+  document.getElementById('svc-trash-link').href = '/app/services/' + SERVICE_ID + '/trash';
+  document.getElementById('svc-new-record-link').href = '/app/services/' + SERVICE_ID + '/records/new';
+  document.getElementById('svc-export-btn').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const res = await window.ntcFetch('/api/services/' + SERVICE_ID + '/export');
+      if (!res.ok) { window.ntcToast('Export failed.', true); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = (SERVICE ? SERVICE.name : 'Service') + '.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+  });
+
+  function renderTable() {
+    const thead = document.getElementById('svc-rec-thead-rest');
+    thead.innerHTML = PREVIEW_KEYS.map(function (k) {
+      const f = SERVICE.fields.find(function (x) { return x.key === k; });
+      return '<th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">' + window.ntcEsc(f ? f.label : k) + '</th>';
+    }).join('');
+
+    const tbody = document.getElementById('svc-rec-tbody');
+    if (!RECORDS.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-400 py-6">No records yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = RECORDS.map(function (r) {
+      const cells = PREVIEW_KEYS.map(function (k) {
+        return '<td class="py-2 px-4 text-gray-700 truncate max-w-xs">' + window.ntcEsc(r.data[k] || '') + '</td>';
+      }).join('');
+      return '<tr class="border-b border-gray-100 hover:bg-gray-50">' +
+        '<td class="py-2 px-3"><input type="checkbox" class="svc-rec-check" value="' + r.id + '"></td>' +
+        '<td class="py-2 px-4 text-gray-500">' + r.id + '</td>' +
+        cells +
+        '<td class="py-2 px-4 text-right whitespace-nowrap">' +
+          '<a href="/app/services/' + SERVICE_ID + '/records/' + r.id + '" class="text-brand-600 hover:underline mr-3">Edit</a>' +
+          '<a href="/app/services/' + SERVICE_ID + '/records/' + r.id + '/print-preview" class="text-gray-500 hover:underline">Print</a>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.svc-rec-check').forEach(function (cb) {
+      cb.addEventListener('change', updateSelCount);
+    });
+  }
+
+  function updateSelCount() {
+    const n = document.querySelectorAll('.svc-rec-check:checked').length;
+    document.getElementById('svc-sel-count').textContent = n;
+    document.getElementById('svc-mass-print-btn').disabled = n === 0;
+  }
+
+  document.getElementById('svc-rec-select-all').addEventListener('change', function () {
+    document.querySelectorAll('.svc-rec-check').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
+    updateSelCount();
+  });
+
+  document.getElementById('svc-mass-print-btn').addEventListener('click', function (evt) {
+    const ids = Array.from(document.querySelectorAll('.svc-rec-check:checked')).map(function (cb) { return cb.value; });
+    if (!ids.length) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const res = await window.ntcFetch('/api/services/' + SERVICE_ID + '/print-pdf-batch?ids=' + ids.join(','));
+      if (!res.ok) { window.ntcToast('Mass print failed.', true); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = (SERVICE ? SERVICE.name : 'Service') + '_Batch_Print.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+  });
+
+  let searchTimer = null;
+  document.getElementById('svc-rec-search').addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadRecords, 250);
+  });
+
+  async function loadRecords() {
+    const q = document.getElementById('svc-rec-search').value.trim();
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    RECORDS = (r.body && r.body.records) || [];
+    renderTable();
+  }
+
+  // ---- Excel Columns modal
+  function renderExcolList() {
+    const el = document.getElementById('excol-list');
+    el.innerHTML = EXCOL.map(function (key, i) {
+      const f = SERVICE.fields.find(function (x) { return x.key === key; });
+      return '<div class="flex items-center gap-2 border border-gray-100 rounded px-2 py-1">' +
+        '<input type="checkbox" class="excol-check" data-key="' + key + '" checked>' +
+        '<span class="flex-1 truncate">' + window.ntcEsc(f ? f.label : key) + '</span>' +
+        '<button data-i="' + i + '" data-dir="-1" class="excol-move text-gray-400 hover:text-gray-700">&uarr;</button>' +
+        '<button data-i="' + i + '" data-dir="1" class="excol-move text-gray-400 hover:text-gray-700">&darr;</button>' +
+      '</div>';
+    }).join('') + (SERVICE.fields || []).filter(function (f) { return EXCOL.indexOf(f.key) === -1; }).map(function (f) {
+      return '<div class="flex items-center gap-2 border border-gray-100 rounded px-2 py-1">' +
+        '<input type="checkbox" class="excol-check" data-key="' + f.key + '">' +
+        '<span class="flex-1 truncate">' + window.ntcEsc(f.label) + '</span>' +
+      '</div>';
+    }).join('');
+    el.querySelectorAll('.excol-move').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const i = parseInt(btn.dataset.i, 10), dir = parseInt(btn.dataset.dir, 10);
+        const j = i + dir;
+        if (j < 0 || j >= EXCOL.length) return;
+        const tmp = EXCOL[i]; EXCOL[i] = EXCOL[j]; EXCOL[j] = tmp;
+        renderExcolList();
+      });
+    });
+  }
+
+  document.getElementById('svc-export-cols-btn').addEventListener('click', function () {
+    EXCOL = (SERVICE.excel_columns && SERVICE.excel_columns.length) ? SERVICE.excel_columns.slice() : SERVICE.fields.map(function (f) { return f.key; });
+    renderExcolList();
+    document.getElementById('excol-modal').classList.remove('hidden');
+  });
+  document.getElementById('excol-close').addEventListener('click', function () { document.getElementById('excol-modal').classList.add('hidden'); });
+  document.getElementById('excol-cancel').addEventListener('click', function () { document.getElementById('excol-modal').classList.add('hidden'); });
+  document.getElementById('excol-save').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const checked = Array.from(document.querySelectorAll('.excol-check:checked')).map(function (cb) { return cb.dataset.key; });
+      const columns = EXCOL.filter(function (k) { return checked.indexOf(k) !== -1; })
+        .concat(checked.filter(function (k) { return EXCOL.indexOf(k) === -1; }));
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/excel-columns', {
+        method: 'PUT', body: JSON.stringify({ columns: columns }),
+      });
+      if (!r.ok) { window.ntcToast('Could not save the column settings.', true); return; }
+      SERVICE.excel_columns = columns;
+      document.getElementById('excol-modal').classList.add('hidden');
+      window.ntcToast('Excel column settings saved.');
+    });
+  });
+
+  // ---- Expiry tracking
+  document.getElementById('svc-expiry-field').addEventListener('change', function (evt) {
+    window.ntcBusy(evt.currentTarget.parentElement, async function () {
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID, {
+        method: 'PUT', body: JSON.stringify({ expiry_field: evt.currentTarget.value }),
+      });
+      if (r.ok) loadExpiring();
+    });
+  });
+
+  async function loadExpiring() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/expiring?days=30');
+    const banner = document.getElementById('svc-expiring-banner');
+    if (!r.ok || !r.body.field || (!r.body.expiring.length && !r.body.expired.length)) {
+      banner.classList.add('hidden');
+      return;
+    }
+    let msg = '';
+    if (r.body.expired.length) msg += '<strong>' + r.body.expired.length + '</strong> record(s) already past their expiry date. ';
+    if (r.body.expiring.length) msg += '<strong>' + r.body.expiring.length + '</strong> record(s) expiring within 30 days.';
+    banner.innerHTML = msg;
+    banner.classList.remove('hidden');
+  }
+
+  async function load() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!r.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = r.body;
+    document.getElementById('svc-rec-title').textContent = SERVICE.name + ' — Records';
+    PREVIEW_KEYS = (SERVICE.fields || []).slice(0, 4).map(function (f) { return f.key; });
+
+    const dateFields = SERVICE.fields.filter(function (f) { return f.type === 'date'; });
+    const expSel = document.getElementById('svc-expiry-field');
+    expSel.innerHTML = '<option value="">(none)</option>' + dateFields.map(function (f) {
+      return '<option value="' + f.key + '"' + (f.key === SERVICE.expiry_field ? ' selected' : '') + '>' + window.ntcEsc(f.label) + '</option>';
+    }).join('');
+
+    await loadRecords();
+    await loadExpiring();
+  }
+  load();
+})();
+</script>
+{% endblock %}

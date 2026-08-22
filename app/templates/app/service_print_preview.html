@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Print Preview — {{ license_no or 'License' }}{% endblock %}
+{% block title %}Print Preview — {{ service_name or 'Service' }}{% endblock %}
 {% block body %}
 <script>window.ntcRequireAuth();</script>
 
@@ -13,8 +13,8 @@
 
   <!-- toolbar -->
   <div id="ppv-toolbar" class="no-print sticky top-0 z-20 bg-white border-b border-gray-300 px-4 py-2.5 flex flex-wrap items-center gap-2">
-    <a href="/app/licenses/{{ lic_id }}" class="text-sm text-brand-600 hover:underline mr-2">&larr; Back to record</a>
-    <span class="text-sm text-gray-500 hidden sm:inline mr-auto">{{ license_no or '' }} &middot; {{ licensee or '' }}</span>
+    <a href="/app/services/{{ service_id }}/records/{{ record_id }}" class="text-sm text-brand-600 hover:underline mr-2">&larr; Back to record</a>
+    <span class="text-sm text-gray-500 hidden sm:inline mr-auto">{{ service_name or '' }} &middot; Record #{{ record_id }}</span>
 
     <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Design Mode: Off</button>
 
@@ -159,7 +159,9 @@
 
 <script>
 (function () {
-  const LIC_ID = {{ lic_id }};
+  const SERVICE_ID = {{ service_id }};
+  const RECORD_ID = {{ record_id }};
+  const API_BASE = '/api/services/' + SERVICE_ID;
   let TEMPLATE = null;
   let FIELDS = {};
   let DESIGN_ON = false;
@@ -286,8 +288,8 @@
     statusEl.textContent = 'Loading…';
     try {
       const [tplRes, dataRes] = await Promise.all([
-        window.ntcFetchJSON('/api/print-template'),
-        window.ntcFetchJSON('/api/print-data/' + LIC_ID),
+        window.ntcFetchJSON(API_BASE + '/print-template'),
+        window.ntcFetchJSON(API_BASE + '/print-data/' + RECORD_ID),
       ]);
       if (!tplRes.ok) { statusEl.textContent = 'Could not load the certificate layout.'; return; }
       if (!dataRes.ok) { statusEl.textContent = (dataRes.body && dataRes.body.detail) || 'Could not load this record.'; return; }
@@ -787,7 +789,7 @@
   document.getElementById('ppv-save').addEventListener('click', function (evt) {
     window.ntcBusy(evt.currentTarget, async function () {
       try {
-        const r = await window.ntcFetchJSON('/api/print-template', { method: 'PUT', body: JSON.stringify(TEMPLATE) });
+        const r = await window.ntcFetchJSON(API_BASE + '/print-template', { method: 'PUT', body: JSON.stringify(TEMPLATE) });
         if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not save the layout.', true); return; }
         window.ntcToast('Layout saved — this is now what everyone sees and prints.');
       } catch (e) { window.ntcToast('Could not reach the server.', true); }
@@ -798,7 +800,7 @@
     if (!confirm('Reset the certificate layout back to the original design? Any positions/sizes you\'ve changed will be lost unless you\'ve already saved and want to keep them.')) return;
     window.ntcBusy(evt.currentTarget, async function () {
       try {
-        const r = await window.ntcFetchJSON('/api/print-template/default');
+        const r = await window.ntcFetchJSON(API_BASE + '/print-template/default');
         if (!r.ok) { window.ntcToast('Could not load the default layout.', true); return; }
         pushUndo();
         TEMPLATE = r.body;
@@ -815,7 +817,7 @@
   document.getElementById('ppv-pdf').addEventListener('click', function (evt) {
     window.ntcBusy(evt.currentTarget, async function () {
       try {
-        const res = await window.ntcFetch('/api/print-pdf/' + LIC_ID, { headers: {} });
+        const res = await window.ntcFetch(API_BASE + '/print-pdf/' + RECORD_ID, { headers: {} });
         if (!res.ok) {
           let detail = 'Could not generate the PDF.';
           try { const b = await res.json(); detail = b.detail || detail; } catch (e2) {}
@@ -825,7 +827,7 @@
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'License_{{ license_no or lic_id }}.pdf'.replace(/[\\/:*?"<>|]/g, '_');
+        a.download = 'Record_{{ record_id }}.pdf'.replace(/[\\/:*?"<>|]/g, '_');
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
@@ -857,7 +859,7 @@
 
   function loadHistoryList() {
     historyList.textContent = 'Loading…';
-    window.ntcFetchJSON('/api/print-template/history').then(function (r) {
+    window.ntcFetchJSON(API_BASE + '/print-template/history').then(function (r) {
       if (!r.ok) { historyList.textContent = 'Could not load saved layouts.'; return; }
       const entries = (r.body.history || []).slice().reverse();
       if (!entries.length) { historyList.innerHTML = '<p class="px-2 py-1 text-gray-400">No saved versions yet.</p>'; return; }
@@ -883,7 +885,7 @@
   document.getElementById('ppv-history-save').addEventListener('click', function () {
     const name = prompt('Name this saved layout (e.g. "Long bond paper", "1PHN layout"):', '');
     if (name === null) return;
-    window.ntcFetchJSON('/api/print-template/history', { method: 'POST', body: JSON.stringify({ name: name, template: TEMPLATE }) })
+    window.ntcFetchJSON(API_BASE + '/print-template/history', { method: 'POST', body: JSON.stringify({ name: name, template: TEMPLATE }) })
       .then(function (r) {
         if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not save this version.', true); return; }
         window.ntcToast('Saved as "' + r.body.name + '".');
@@ -893,7 +895,7 @@
 
   document.getElementById('ppv-history-setdefault').addEventListener('click', function () {
     if (!confirm('Make the CURRENT layout your default? "Reset to Default" will recall this from now on instead of the original factory layout.')) return;
-    window.ntcFetchJSON('/api/print-template/set-default', { method: 'POST' }).then(function (r) {
+    window.ntcFetchJSON(API_BASE + '/print-template/set-default', { method: 'POST' }).then(function (r) {
       if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not set the default.', true); return; }
       window.ntcToast('Current layout is now your default.');
     }).catch(function () { window.ntcToast('Could not reach the server.', true); });
@@ -901,7 +903,7 @@
 
   function restoreHistoryEntry(id) {
     if (!confirm('Restore this saved layout? It becomes the live layout everyone sees and prints (your current layout is not auto-saved first -- save it as a version too if you want to keep it).')) return;
-    window.ntcFetchJSON('/api/print-template/history/' + id).then(function (r) {
+    window.ntcFetchJSON(API_BASE + '/print-template/history/' + id).then(function (r) {
       if (!r.ok) { window.ntcToast('Could not load that saved layout.', true); return; }
       pushUndo();
       TEMPLATE = r.body;
@@ -916,7 +918,7 @@
 
   function deleteHistoryEntry(id) {
     if (!confirm('Delete this saved layout? This cannot be undone.')) return;
-    window.ntcFetchJSON('/api/print-template/history/' + id, { method: 'DELETE' }).then(function (r) {
+    window.ntcFetchJSON(API_BASE + '/print-template/history/' + id, { method: 'DELETE' }).then(function (r) {
       if (!r.ok) { window.ntcToast('Could not delete that saved layout.', true); return; }
       loadHistoryList();
     }).catch(function () { window.ntcToast('Could not reach the server.', true); });

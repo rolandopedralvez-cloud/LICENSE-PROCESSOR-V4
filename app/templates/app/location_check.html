@@ -74,7 +74,10 @@
     <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
       <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
         <h2 class="font-medium text-gray-700 text-sm" id="locmap-title">Preview</h2>
-        <a id="locmap-open-record" href="#" class="hidden text-xs text-brand-600 hover:underline">Open record</a>
+        <div class="flex items-center gap-2">
+          <button id="btn-locmap-expand" class="text-xs text-gray-400 hover:text-gray-700" title="Expand to full screen">&#10021; Expand</button>
+          <a id="locmap-open-record" href="#" class="hidden text-xs text-brand-600 hover:underline">Open record</a>
+        </div>
       </div>
       <div class="p-4">
         <p class="text-xs text-gray-400 mb-2">
@@ -82,7 +85,10 @@
           <span style="color:#0f9d8a">Green</span> = suggested area &middot;
           <span style="color:#2b6cb0">Blue dots</span> = neighbor stations used for the suggestion.
         </p>
-        <div id="locmap" class="rounded-md border border-gray-200" style="height:420px;"></div>
+        <div id="locmap-wrap" class="ntc-map-wrap">
+          <button id="btn-locmap-collapse" class="ntc-map-close hidden" title="Exit full screen">&times;</button>
+          <div id="locmap" class="rounded-md border border-gray-200" style="height:420px;"></div>
+        </div>
         <div id="locmap-label" class="text-xs text-gray-500 mt-2">Click a flagged row to preview it here.</div>
         <div id="loc-save-bar" class="hidden mt-3 flex items-center gap-2">
           <button id="btn-loc-save" class="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm font-medium flex-1">
@@ -200,6 +206,7 @@ function initLocMap() {
   const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri World Imagery' });
   streets.addTo(locMap);
   L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(locMap);
+  window.ntcExpandMap('locmap-wrap', 'btn-locmap-expand', 'btn-locmap-collapse', function () { return locMap; });
 }
 const dotIcon = { className: '', html: '<div style="width:9px;height:9px;border-radius:50%;background:#2b6cb0;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)"></div>', iconSize: [9, 9], iconAnchor: [4, 4] };
 const greenIcon = { className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#0f9d8a;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [16, 16], iconAnchor: [8, 8] };

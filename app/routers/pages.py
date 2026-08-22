@@ -275,3 +275,78 @@ def app_users(request: Request, _user=Depends(require_login)):
 @router.get("/app/settings")
 def app_settings(request: Request, _user=Depends(require_login)):
     return templates.TemplateResponse(request, "app/settings.html", {})
+
+
+# ---------------------------------------------------------------- Other Services
+# See app/legacy/services_builtin.py -- a separate, generic multi-service
+# system that sits alongside Telco RSL licensing without touching it. Every
+# page here is just a shell that reads/writes /api/services/* (same
+# window.ntcFetch pattern as everything else in this file).
+
+@router.get("/app/services")
+def app_services_list(request: Request, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/services_list.html", {})
+
+
+@router.get("/app/services/{service_id}/records")
+def app_service_records(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_records.html", {"service_id": service_id})
+
+
+@router.get("/app/services/{service_id}/design")
+def app_service_design(request: Request, service_id: int, _user=Depends(require_login)):
+    """The field designer -- arrange this service's custom input fields on
+    a canvas (add / drag / resize / rename / retype), same drag-to-place
+    idea as the Telco print Design mode. record_id is None here."""
+    return templates.TemplateResponse(
+        request, "app/service_form.html", {"service_id": service_id, "record_id": None, "start_in_design": True},
+    )
+
+
+@router.get("/app/services/{service_id}/records/new")
+def app_service_record_new(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(
+        request, "app/service_form.html", {"service_id": service_id, "record_id": None, "start_in_design": False},
+    )
+
+
+@router.get("/app/services/{service_id}/records/{record_id}")
+def app_service_record_edit(request: Request, service_id: int, record_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(
+        request, "app/service_form.html", {"service_id": service_id, "record_id": record_id, "start_in_design": False},
+    )
+
+
+@router.get("/app/services/{service_id}/records/{record_id}/print-preview")
+def app_service_print_preview(request: Request, service_id: int, record_id: int, _user=Depends(require_login)):
+    from app.legacy import services_builtin as sb
+    svc = sb.get_service(service_id)
+    return templates.TemplateResponse(
+        request, "app/service_print_preview.html",
+        {"service_id": service_id, "record_id": record_id, "service_name": svc["name"] if svc else None},
+    )
+
+
+@router.get("/app/services/{service_id}/analytics")
+def app_service_analytics(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_analytics.html", {"service_id": service_id})
+
+
+@router.get("/app/services/{service_id}/trash")
+def app_service_trash(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_trash.html", {"service_id": service_id})
+
+
+@router.get("/app/services/{service_id}/import")
+def app_service_import(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_import.html", {"service_id": service_id})
+
+
+@router.get("/app/services/{service_id}/board")
+def app_service_board(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_board.html", {"service_id": service_id})
+
+
+@router.get("/app/services/{service_id}/map")
+def app_service_map(request: Request, service_id: int, _user=Depends(require_login)):
+    return templates.TemplateResponse(request, "app/service_map.html", {"service_id": service_id})

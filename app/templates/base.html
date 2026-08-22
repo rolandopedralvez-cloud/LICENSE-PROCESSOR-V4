@@ -58,6 +58,29 @@
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-thumb{background:#c7c7d1;border-radius:4px}
 
+    /* ---- Expandable map (Analytics, Location Check, license edit form's
+       pin map) -- an "Expand" button toggles the map's own wrapper to a
+       full-screen overlay; see ntcExpandMap() below. */
+    .ntc-map-wrap { position: relative; }
+    .ntc-map-wrap.ntc-map-fullscreen {
+      position: fixed; inset: 12px; z-index: 9999; background: #fff;
+      border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.35); padding: 8px;
+    }
+    .ntc-map-wrap.ntc-map-fullscreen > div[id$="map"],
+    .ntc-map-wrap.ntc-map-fullscreen [id^="an-map"],
+    .ntc-map-wrap.ntc-map-fullscreen [id^="locmap"],
+    .ntc-map-wrap.ntc-map-fullscreen [id^="pin-map"],
+    .ntc-map-wrap.ntc-map-fullscreen [id^="batch-map"],
+    .ntc-map-wrap.ntc-map-fullscreen [id^="br-map"] {
+      height: 100% !important;
+    }
+    .ntc-map-close {
+      position: absolute; top: 14px; right: 14px; z-index: 10000;
+      width: 30px; height: 30px; border-radius: 999px; background: #1f2937; color: #fff;
+      font-size: 18px; line-height: 1; border: none; cursor: pointer;
+    }
+    .ntc-map-close:hover { background: #111827; }
+
     /* ---- Account Preferences: font family / size (app/routers/settings.py,
        /api/my-preferences) --------------------------------------------- */
     :root { --ntc-font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; --ntc-font-size: 16px; }
@@ -300,6 +323,37 @@
         el.style.opacity = "0";
         setTimeout(function () { el.remove(); }, 300);
       }, 3200);
+    };
+
+    // Shared "expand map to full screen" wiring -- used by Analytics, the
+    // license edit form's pin map, and Location Check. wrapId is the
+    // .ntc-map-wrap div around the map; expandBtnId/collapseBtnId are the
+    // two buttons; getMap is a function returning the current Leaflet map
+    // instance (may be null before the map's been created yet) so it can
+    // be told to invalidateSize() once the layout settles.
+    window.ntcExpandMap = function (wrapId, expandBtnId, collapseBtnId, getMap) {
+      const wrap = document.getElementById(wrapId);
+      const expandBtn = document.getElementById(expandBtnId);
+      const collapseBtn = document.getElementById(collapseBtnId);
+      if (!wrap || !expandBtn || !collapseBtn) return;
+      function settle() {
+        setTimeout(function () { const m = getMap && getMap(); if (m) m.invalidateSize(); }, 220);
+      }
+      function enter() {
+        wrap.classList.add('ntc-map-fullscreen');
+        collapseBtn.classList.remove('hidden');
+        document.addEventListener('keydown', onEsc);
+        settle();
+      }
+      function exit() {
+        wrap.classList.remove('ntc-map-fullscreen');
+        collapseBtn.classList.add('hidden');
+        document.removeEventListener('keydown', onEsc);
+        settle();
+      }
+      function onEsc(e) { if (e.key === 'Escape') exit(); }
+      expandBtn.addEventListener('click', enter);
+      collapseBtn.addEventListener('click', exit);
     };
 
     document.addEventListener("htmx:configRequest", function (evt) {

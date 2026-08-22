@@ -1,0 +1,147 @@
+{% extends "app/_shell.html" %}
+{% block title %}Analytics — NTC{% endblock %}
+{% block page_title %}<span id="svc-an-title">Analytics</span>{% endblock %}
+{% block page_subtitle %}Choose what you want to see for this service -- counts by field, totals, or trends over time.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Analytics</li>
+{% endblock %}
+
+{% block app_content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+  <div class="lg:col-span-2 space-y-4" id="svc-an-widgets">
+    <p class="text-sm text-gray-400 text-center py-6">Loading&hellip;</p>
+  </div>
+
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Add a Widget</h2>
+    </div>
+    <div class="p-4 space-y-3 text-sm">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Widget type</label>
+        <select id="an-add-type" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+          <option value="count_by">Count by field (bar list)</option>
+          <option value="sum">Add up a number field</option>
+          <option value="trend">Trend over time (by a date field)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Field</label>
+        <select id="an-add-field" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Title</label>
+        <input id="an-add-label" type="text" placeholder="e.g. By Status" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+      </div>
+      <button id="an-add-btn" class="w-full text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-2 hover:bg-brand-700">+ Add Widget</button>
+    </div>
+    <div class="px-4 py-3 border-t border-gray-100">
+      <p class="text-xs font-medium text-gray-600 mb-2">Current widgets</p>
+      <div id="svc-an-config-list" class="space-y-1 text-xs"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  let SERVICE = null;
+
+  function bar(label, count, pct) {
+    return '<div class="flex items-center gap-2 text-xs">' +
+      '<span class="w-40 truncate text-gray-600">' + window.ntcEsc(label) + '</span>' +
+      '<div class="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden"><div class="bg-brand-500 h-3" style="width:' + pct + '%"></div></div>' +
+      '<span class="w-10 text-right text-gray-500">' + count + '</span>' +
+    '</div>';
+  }
+
+  function renderWidgets(data) {
+    const el = document.getElementById('svc-an-widgets');
+    if (!data.widgets.length) {
+      el.innerHTML = '<div class="bg-white rounded-md shadow-sm p-8 text-center text-sm text-gray-400">No widgets yet -- add one on the right (e.g. "Count by field" on your Status field) to start seeing charts here.</div>';
+      return;
+    }
+    el.innerHTML = '<div class="bg-white rounded-md shadow-sm p-4 mb-2 flex items-center justify-between"><p class="text-2xl font-bold text-gray-800">' + data.total_records + '</p><p class="text-xs text-gray-500">total record(s)</p></div>' +
+      data.widgets.map(function (w) {
+        let body = '';
+        if (w.type === 'sum') {
+          body = '<p class="text-2xl font-bold text-brand-700">' + w.total.toLocaleString() + '</p><p class="text-xs text-gray-400">across ' + w.count + ' record(s)</p>';
+        } else {
+          body = w.items.length
+            ? '<div class="space-y-1.5">' + w.items.map(function (i) { return bar(i.name, i.count, Math.max(i.pct, 2)); }).join('') + '</div>'
+            : '<p class="text-xs text-gray-400">No data yet.</p>';
+        }
+        return '<div class="bg-white rounded-md shadow-sm p-4"><h3 class="text-sm font-medium text-gray-700 mb-3">' + window.ntcEsc(w.label || w.field) + '</h3>' + body + '</div>';
+      }).join('');
+  }
+
+  function renderConfigList() {
+    const el = document.getElementById('svc-an-config-list');
+    const cfg = SERVICE.analytics_config || [];
+    if (!cfg.length) { el.innerHTML = '<p class="text-gray-400">None yet.</p>'; return; }
+    el.innerHTML = cfg.map(function (w, i) {
+      return '<div class="flex items-center justify-between gap-2 border border-gray-100 rounded px-2 py-1">' +
+        '<span class="truncate">' + window.ntcEsc(w.label || w.field) + '</span>' +
+        '<button data-i="' + i + '" class="an-remove-widget text-red-500 hover:underline shrink-0">Remove</button>' +
+      '</div>';
+    }).join('');
+    el.querySelectorAll('.an-remove-widget').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const i = parseInt(btn.dataset.i, 10);
+        SERVICE.analytics_config.splice(i, 1);
+        await saveConfig();
+      });
+    });
+  }
+
+  async function saveConfig() {
+    await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/analytics-config', {
+      method: 'PUT', body: JSON.stringify({ config: SERVICE.analytics_config }),
+    });
+    renderConfigList();
+    await loadData();
+  }
+
+  document.getElementById('an-add-btn').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const field = document.getElementById('an-add-field').value;
+      if (!field) { window.ntcToast('Pick a field first.', true); return; }
+      const widget = {
+        type: document.getElementById('an-add-type').value,
+        field: field,
+        label: document.getElementById('an-add-label').value.trim() || undefined,
+      };
+      SERVICE.analytics_config = SERVICE.analytics_config || [];
+      SERVICE.analytics_config.push(widget);
+      document.getElementById('an-add-label').value = '';
+      await saveConfig();
+    });
+  });
+
+  function fillFieldPicker() {
+    const el = document.getElementById('an-add-field');
+    el.innerHTML = (SERVICE.fields || []).map(function (f) {
+      return '<option value="' + f.key + '">' + window.ntcEsc(f.label) + '</option>';
+    }).join('');
+  }
+
+  async function loadData() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/analytics-data');
+    if (r.ok) renderWidgets(r.body);
+  }
+
+  async function load() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!r.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = r.body;
+    document.getElementById('svc-an-title').textContent = SERVICE.name + ' — Analytics';
+    fillFieldPicker();
+    renderConfigList();
+    await loadData();
+  }
+  load();
+})();
+</script>
+{% endblock %}

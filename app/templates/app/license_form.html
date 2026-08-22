@@ -96,6 +96,15 @@
       {% for field, label in fields %}
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{{ label }}</label>
+        {% if field in ('freq1', 'freq2', 'freq3', 'freq4') %}
+        <textarea
+          id="f_{{ field }}"
+          name="{{ field }}"
+          rows="3"
+          placeholder="One frequency per line"
+          class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+        >{{ (license[field] if license else '') or '' }}</textarea>
+        {% else %}
         <input
           id="f_{{ field }}"
           name="{{ field }}"
@@ -103,6 +112,7 @@
           value="{{ (license[field] if license else '') or '' }}"
           class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
         >
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -116,6 +126,7 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
       </svg>
       <h2 class="font-medium text-gray-700 text-sm">Station Location</h2>
+      <button type="button" id="btn-pinmap-expand" class="text-xs text-gray-400 hover:text-gray-700" title="Expand to full screen">&#10021; Expand</button>
     </div>
     <div class="p-4">
       <p class="text-xs text-gray-400 mb-3">
@@ -128,7 +139,10 @@
         <button type="button" id="map-search-btn" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Search</button>
         <button type="button" id="map-clear-pin" class="border border-red-200 text-red-600 rounded-md px-3 py-1.5 text-sm hover:bg-red-50">Clear Pin</button>
       </div>
-      <div id="pin-map" class="rounded-md border border-gray-200" style="height:360px;"></div>
+      <div id="pin-map-wrap" class="ntc-map-wrap">
+        <button type="button" id="btn-pinmap-collapse" class="ntc-map-close hidden" title="Exit full screen">&times;</button>
+        <div id="pin-map" class="rounded-md border border-gray-200" style="height:360px;"></div>
+      </div>
       <div id="map-label" class="text-xs text-gray-500 mt-2">No coordinates set yet — click the map to drop a pin.</div>
     </div>
   </div>
@@ -288,6 +302,7 @@ const statusBox = document.getElementById('form-status');
       { maxZoom: 19, attribution: 'Esri World Imagery' });
     streets.addTo(pinMap);
     L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { position: 'topright' }).addTo(pinMap);
+    window.ntcExpandMap('pin-map-wrap', 'btn-pinmap-expand', 'btn-pinmap-collapse', function () { return pinMap; });
 
     pinMap.on('click', function (e) {
       placePin(e.latlng.lat, e.latlng.lng);
@@ -421,7 +436,7 @@ const statusBox = document.getElementById('form-status');
     return box.paragraphs.map(function (p) {
       const spans = p.runs.map(function (r) {
         if (r.type === 'br') return '<br>';
-        const text = r.type === 'field' ? (fields[r.field] || '') : (r.text || '');
+        const text = r.type === 'field' ? (fields[r.field] || '') : r.type === 'pagenum' ? '(1/1)' : (r.text || '');
         const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
           ';font-family:' + cssFontFamily(r.font) + ';color:' + (r.color || '#000000') + ';';
         return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';

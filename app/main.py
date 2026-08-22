@@ -32,8 +32,15 @@ import app.models  # noqa: F401
 
 from app.routers import (
     auth, users, meta, licenses_ro, licenses, analytics, import_, scan,
-    print as print_router, print_design, trash, settings, pages,
+    print as print_router, print_design, trash, settings, pages, services_api,
 )
+from app.legacy.services_builtin import ensure_services_schema
+
+# Other Services feature (see app/legacy/services_builtin.py) -- its own
+# tables, created/upgraded the same way as everything else in
+# app.core.ensure_schema(): CREATE TABLE IF NOT EXISTS, safe to call every
+# startup. Completely separate from the Telco RSL `licenses` table.
+ensure_services_schema()
 
 app = FastAPI(title="NTC R02 Telco Database", version="2.0")
 
@@ -91,6 +98,7 @@ app.include_router(print_router.router)
 app.include_router(print_design.router)
 app.include_router(trash.router)
 app.include_router(settings.router)
+app.include_router(services_api.router)
 
 
 # ---------------------------------------------------------------- background sweep + shutdown

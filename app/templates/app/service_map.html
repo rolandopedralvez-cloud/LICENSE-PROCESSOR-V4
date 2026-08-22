@@ -1,0 +1,68 @@
+{% extends "app/_shell.html" %}
+{% block title %}Map — NTC{% endblock %}
+{% block page_title %}<span id="svc-mp-title">Map</span>{% endblock %}
+{% block page_subtitle %}Every record with a Location field filled in, plotted on the map.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Map</li>
+{% endblock %}
+
+{% block app_content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<div class="flex items-center justify-between gap-2 mb-2">
+  <a id="svc-mp-back" class="text-xs text-brand-600 hover:underline">&larr; Back to Records</a>
+  <button id="btn-mp-expand" class="text-xs text-gray-400 hover:text-gray-700" title="Expand to full screen">&#10021; Expand</button>
+</div>
+
+<div id="svc-mp-empty" class="hidden bg-white rounded-md shadow-sm p-8 text-center text-sm text-gray-400 mt-3">
+  This service doesn't have a Location field yet -- add one in Design Fields (choose "Location (map)" as the input type), then fill it in on a record to see it here.
+</div>
+
+<div id="svc-mp-wrap" class="ntc-map-wrap" style="height:32rem;">
+  <button id="btn-mp-collapse" class="ntc-map-close hidden" title="Exit full screen">&times;</button>
+  <div id="svc-map" style="height:100%;width:100%;"></div>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  document.getElementById('svc-mp-back').href = '/app/services/' + SERVICE_ID + '/records';
+
+  let map = null;
+
+  function initMap(points) {
+    if (map) return;
+    map = L.map('svc-map', { zoomControl: true }).setView([16.9, 121.6], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+    }).addTo(map);
+    const bounds = [];
+    points.forEach(function (p) {
+      const m = L.marker([p.lat, p.lng]).addTo(map);
+      m.bindPopup('<b>' + window.ntcEsc(p.title || ('#' + p.record_id)) + '</b><br>' + window.ntcEsc(p.field_label) +
+        '<br><a href="/app/services/' + SERVICE_ID + '/records/' + p.record_id + '">Open record</a>');
+      bounds.push([p.lat, p.lng]);
+    });
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+    if (window.ntcExpandMap) window.ntcExpandMap('svc-mp-wrap', 'btn-mp-expand', 'btn-mp-collapse', function () { return map; });
+  }
+
+  async function load() {
+    const sr = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (sr.ok) document.getElementById('svc-mp-title').textContent = sr.body.name + ' — Map';
+
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/map');
+    if (!r.ok) return;
+    if (!r.body.fields.length) {
+      document.getElementById('svc-mp-empty').classList.remove('hidden');
+      document.getElementById('svc-mp-wrap').classList.add('hidden');
+      return;
+    }
+    initMap(r.body.points || []);
+  }
+  load();
+})();
+</script>
+{% endblock %}

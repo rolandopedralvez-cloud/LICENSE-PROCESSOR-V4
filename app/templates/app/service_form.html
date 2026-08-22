@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Design Fields' if start_in_design else ('Edit Record' if record_id else 'New Record') }} — NTC{% endblock %}
+{% block body %}
+<script>window.ntcRequireAuth();</script>
+
+<div class="max-w-6xl mx-auto px-4 py-4">
+  <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+    <div>
+      <a href="/app/services" class="text-xs text-gray-400 hover:text-gray-600">&larr; Other Services</a>
+      <h1 class="text-lg font-semibold text-gray-800" id="svc-form-title">&nbsp;</h1>
+    </div>
+    <div class="flex items-center gap-2 text-xs flex-wrap">
+      <button id="svc-design-toggle" class="font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Design Fields: Off</button>
+      <button id="svc-add-field" class="hidden font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">+ Add Field</button>
+      <button id="svc-save-fields" class="hidden font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save Field Layout</button>
+      <button id="svc-save-record" class="font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save Record</button>
+      <button id="svc-delete-record" class="hidden font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Delete</button>
+      <a id="svc-print-link" class="hidden font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Print Preview</a>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-500 mb-3" id="svc-form-hint"></p>
+
+  <div class="flex gap-4 items-start flex-wrap">
+    <div id="svc-canvas-wrap" class="relative bg-white shadow-sm border border-gray-200 rounded-md overflow-auto" style="width:900px;height:640px;">
+      <div id="svc-canvas" class="relative" style="width:1600px;height:1200px;"></div>
+    </div>
+
+    <!-- field properties panel -- Design Mode only -->
+    <div id="svc-field-panel" class="hidden w-72 shrink-0 bg-white shadow-sm border border-gray-200 rounded-md p-3 text-sm space-y-3">
+      <p class="font-medium text-gray-700 text-xs uppercase tracking-wide">Field Settings</p>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Field name (label)</label>
+        <input id="fp-label" type="text" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Input type</label>
+        <select id="fp-type" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+          <option value="text">Single line text</option>
+          <option value="textarea">Multi-line text</option>
+          <option value="number">Number</option>
+          <option value="date">Date</option>
+          <option value="select">Dropdown</option>
+          <option value="checkbox">Checkbox (yes/no)</option>
+          <option value="location">Location (map)</option>
+        </select>
+      </div>
+      <div id="fp-options-wrap" class="hidden">
+        <label class="block text-xs text-gray-500 mb-1">Dropdown choices (one per line)</label>
+        <textarea id="fp-options" rows="4" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"></textarea>
+      </div>
+      <label class="flex items-center gap-2 text-xs text-gray-600">
+        <input id="fp-required" type="checkbox"> Required field
+      </label>
+      <div class="flex gap-2 pt-2 border-t border-gray-100">
+        <button id="fp-apply" class="flex-1 text-xs font-medium bg-brand-600 text-white rounded-md px-2 py-1.5 hover:bg-brand-700">Apply</button>
+        <button id="fp-delete" class="text-xs font-medium border border-red-300 text-red-600 rounded-md px-2 py-1.5 hover:bg-red-50">Delete Field</button>
+      </div>
+      <p class="text-[11px] text-gray-400 pt-2 border-t border-gray-100">Drag a field to move it. Drag its bottom-right corner to resize.</p>
+    </div>
+  </div>
+
+  <!-- Attachments -- only once the record has been saved (needs a record id) -->
+  <div id="svc-attach-section" class="hidden bg-white shadow-sm border border-gray-200 rounded-md p-4 mt-4 max-w-2xl">
+    <h2 class="text-sm font-medium text-gray-700 mb-3">Attachments</h2>
+    <div id="svc-attach-list" class="space-y-1 text-sm mb-3"></div>
+    <input id="svc-attach-file" type="file" class="block w-full text-sm border border-gray-300 rounded-md px-3 py-2">
+  </div>
+</div>
+
+<!-- ============================== Review Before Saving modal ============================== -->
+<div id="svc-review-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-md shadow-lg w-full max-w-md max-h-[85vh] flex flex-col">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
+      <h3 class="font-medium text-gray-700 text-sm">Please Review Before Saving</h3>
+      <button id="svc-review-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+    </div>
+    <div id="svc-review-body" class="p-4 overflow-y-auto space-y-2 text-sm"></div>
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+      <button id="svc-review-edit" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">&larr; Go Back &amp; Edit</button>
+      <button id="svc-review-confirm" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Confirm &amp; Save</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .svc-box { position: absolute; }
+  .svc-box .svc-box-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+    color: #6b7280; margin-bottom: 4px;
+  }
+  #svc-canvas.design-on .svc-box { cursor: move; outline: 1px dashed transparent; }
+  #svc-canvas.design-on .svc-box:hover { outline-color: #a78bfa; }
+  .svc-box.selected { outline: 2px solid #6d28d9 !important; }
+  #svc-canvas.design-on .svc-box input,
+  #svc-canvas.design-on .svc-box select,
+  #svc-canvas.design-on .svc-box textarea { pointer-events: none; background: #f9fafb; }
+  .svc-resize-handle {
+    position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px;
+    background: #6d28d9; border-radius: 2px; cursor: nwse-resize; display: none;
+  }
+  .svc-box.selected .svc-resize-handle { display: block; }
+  /* Industry-standard input polish: a real focus ring (added via
+     INPUT_CLASSES in JS) plus a clear red state for a required field
+     left blank, applied when Save Record's validation catches it. */
+  .svc-field-input.svc-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444; }
+  .svc-field-invalid-msg { color: #dc2626; font-size: 11px; margin-top: 2px; }
+</style>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  const RECORD_ID = {{ record_id if record_id else 'null' }};
+  let SERVICE = null;
+  let FIELDS = [];
+  let RECORD_DATA = {};
+  let DESIGN_ON = {{ 'true' if start_in_design else 'false' }};
+  let SELECTED = null;
+  let nextId = 1;
+
+  const canvasEl = document.getElementById('svc-canvas');
+
+  // Same input look every other form in this app already uses (login,
+  // license form): rounded-md, a visible focus ring/border in brand
+  // purple, a subtle transition -- rather than the bare unstyled boxes
+  // this canvas started with.
+  const INPUT_CLASSES = 'border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-800 ' +
+    'transition-shadow duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 ' +
+    'hover:border-gray-400 svc-field-input';
+
+  function fieldInputHTML(f) {
+    const val = RECORD_DATA[f.key];
+    const base = 'style="width:100%;height:100%;box-sizing:border-box;" class="' + INPUT_CLASSES + '" data-key="' + f.key + '"';
+    const withPlaceholder = base + ' placeholder="Enter ' + window.ntcEsc(f.label.toLowerCase()) + '"';
+    if (f.type === 'textarea') return '<textarea ' + withPlaceholder + '>' + window.ntcEsc(val || '') + '</textarea>';
+    if (f.type === 'number') return '<input type="number" ' + withPlaceholder + ' value="' + window.ntcEsc(val || '') + '">';
+    if (f.type === 'date') return '<input type="date" ' + base + ' value="' + window.ntcEsc(val || '') + '">';
+    if (f.type === 'checkbox') {
+      return '<label style="display:flex;align-items:center;gap:8px;width:100%;height:100%;cursor:pointer;" class="text-sm text-gray-700">' +
+        '<input type="checkbox" data-key="' + f.key + '" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 svc-field-input" ' + (val ? 'checked' : '') + '> Yes' +
+      '</label>';
+    }
+    if (f.type === 'select') {
+      const opts = (f.options || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      return '<select ' + base + '><option value="">Select ' + window.ntcEsc(f.label.toLowerCase()) + '&hellip;</option>' + opts.map(function (o) {
+        return '<option value="' + window.ntcEsc(o) + '"' + (val === o ? ' selected' : '') + '>' + window.ntcEsc(o) + '</option>';
+      }).join('') + '</select>';
+    }
+    if (f.type === 'location') {
+      return '<div style="display:flex;gap:6px;width:100%;height:100%;">' +
+        '<input type="text" placeholder="lat, lng (e.g. 14.5995, 120.9842)" style="flex:1;box-sizing:border-box;" class="' + INPUT_CLASSES + '" data-key="' + f.key + '" value="' + window.ntcEsc(val || '') + '">' +
+        '<button type="button" class="svc-use-location text-sm border border-gray-300 rounded-md px-2.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shrink-0" data-key="' + f.key + '" title="Use my current location">&#128205;</button>' +
+      '</div>';
+    }
+    return '<input type="text" ' + withPlaceholder + ' value="' + window.ntcEsc(val || '') + '">';
+  }
+
+  function renderAll() {
+    canvasEl.classList.toggle('design-on', DESIGN_ON);
+    canvasEl.querySelectorAll('.svc-box').forEach(function (el) { el.remove(); });
+    FIELDS.forEach(function (f) {
+      const el = document.createElement('div');
+      el.className = 'svc-box';
+      el.dataset.key = f.key;
+      el.style.left = f.x + 'px'; el.style.top = f.y + 'px';
+      el.style.width = f.w + 'px'; el.style.height = f.h + 'px';
+      el.innerHTML = '<div class="svc-box-label">' + window.ntcEsc(f.label) + (f.required ? ' <span class="text-red-500">*</span>' : '') + '</div>' + fieldInputHTML(f);
+      const handle = document.createElement('div');
+      handle.className = 'svc-resize-handle';
+      el.appendChild(handle);
+      canvasEl.appendChild(el);
+    });
+    document.getElementById('svc-add-field').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('svc-save-fields').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('svc-save-record').classList.toggle('hidden', DESIGN_ON);
+    document.getElementById('svc-field-panel').classList.toggle('hidden', !DESIGN_ON || !SELECTED);
+    document.getElementById('svc-design-toggle').textContent = 'Design Fields: ' + (DESIGN_ON ? 'On' : 'Off');
+
+    // Clear a field's red "missing" state as soon as the person starts
+    // fixing it, instead of making them re-click Save to see it clear.
+    canvasEl.querySelectorAll('.svc-field-input').forEach(function (el) {
+      el.addEventListener('input', function () { el.classList.remove('svc-invalid'); });
+    });
+
+    // "Use my location" (location-type fields) -- reads the phone/browser's
+    // GPS via the standard Geolocation API, no map library needed.
+    canvasEl.querySelectorAll('.svc-use-location').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!navigator.geolocation) { window.ntcToast('This browser cannot get your location.', true); return; }
+        btn.textContent = '...';
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          btn.textContent = '📍';
+          const input = canvasEl.querySelector('input[data-key="' + btn.dataset.key + '"]');
+          if (input) input.value = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
+        }, function () {
+          btn.textContent = '📍';
+          window.ntcToast('Could not get your location -- check location permission for this site.', true);
+        }, { enableHighAccuracy: true, timeout: 10000 });
+      });
+    });
+  }
+
+  function selectField(key) {
+    SELECTED = key;
+    canvasEl.querySelectorAll('.svc-box').forEach(function (el) {
+      el.classList.toggle('selected', el.dataset.key === key);
+    });
+    const f = FIELDS.find(function (x) { return x.key === key; });
+    document.getElementById('svc-field-panel').classList.toggle('hidden', !f);
+    if (f) {
+      document.getElementById('fp-label').value = f.label;
+      document.getElementById('fp-type').value = f.type;
+      document.getElementById('fp-required').checked = !!f.required;
+      document.getElementById('fp-options').value = f.options || '';
+      document.getElementById('fp-options-wrap').classList.toggle('hidden', f.type !== 'select');
+    }
+  }
+
+  // ---- drag / resize (Design Mode only)
+  let drag = null;
+  canvasEl.addEventListener('mousedown', function (evt) {
+    const boxEl = evt.target.closest('.svc-box');
+    if (!DESIGN_ON) return;
+    if (!boxEl) { selectField(null); return; }
+    selectField(boxEl.dataset.key);
+    const f = FIELDS.find(function (x) { return x.key === boxEl.dataset.key; });
+    const isHandle = evt.target.classList.contains('svc-resize-handle');
+    drag = { key: f.key, resize: isHandle, startX: evt.clientX, startY: evt.clientY, ox: f.x, oy: f.y, ow: f.w, oh: f.h };
+    evt.preventDefault();
+  });
+  document.addEventListener('mousemove', function (evt) {
+    if (!drag) return;
+    const f = FIELDS.find(function (x) { return x.key === drag.key; });
+    if (!f) return;
+    const dx = evt.clientX - drag.startX, dy = evt.clientY - drag.startY;
+    const el = canvasEl.querySelector('.svc-box[data-key="' + drag.key + '"]');
+    if (drag.resize) {
+      f.w = Math.max(60, drag.ow + dx); f.h = Math.max(28, drag.oh + dy);
+      if (el) { el.style.width = f.w + 'px'; el.style.height = f.h + 'px'; }
+    } else {
+      f.x = Math.max(0, drag.ox + dx); f.y = Math.max(0, drag.oy + dy);
+      if (el) { el.style.left = f.x + 'px'; el.style.top = f.y + 'px'; }
+    }
+  });
+  document.addEventListener('mouseup', function () { drag = null; });
+
+  document.getElementById('svc-add-field').addEventListener('click', function () {
+    let n = 1, key;
+    do { key = 'field_' + (FIELDS.length + n); n++; } while (FIELDS.some(function (f) { return f.key === key; }));
+    const f = { key: key, label: 'New Field', type: 'text', x: 20, y: 20, w: 220, h: 46, required: false, options: '' };
+    FIELDS.push(f);
+    renderAll();
+    selectField(key);
+  });
+
+  document.getElementById('fp-type').addEventListener('change', function () {
+    document.getElementById('fp-options-wrap').classList.toggle('hidden', this.value !== 'select');
+  });
+
+  document.getElementById('fp-apply').addEventListener('click', function () {
+    if (!SELECTED) return;
+    const f = FIELDS.find(function (x) { return x.key === SELECTED; });
+    if (!f) return;
+    f.label = document.getElementById('fp-label').value.trim() || f.label;
+    f.type = document.getElementById('fp-type').value;
+    f.required = document.getElementById('fp-required').checked;
+    f.options = document.getElementById('fp-options').value;
+    renderAll();
+    selectField(SELECTED);
+  });
+
+  document.getElementById('fp-delete').addEventListener('click', function () {
+    if (!SELECTED) return;
+    if (!confirm('Remove this field? Any data already saved under it will no longer show anywhere.')) return;
+    FIELDS = FIELDS.filter(function (x) { return x.key !== SELECTED; });
+    SELECTED = null;
+    renderAll();
+  });
+
+  document.getElementById('svc-design-toggle').addEventListener('click', function () {
+    DESIGN_ON = !DESIGN_ON;
+    if (!DESIGN_ON) selectField(null);
+    renderAll();
+  });
+
+  document.getElementById('svc-save-fields').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/fields', {
+        method: 'PUT', body: JSON.stringify({ fields: FIELDS }),
+      });
+      if (!r.ok) { window.ntcToast('Could not save the field layout.', true); return; }
+      FIELDS = r.body.fields;
+      renderAll();
+      window.ntcToast('Field layout saved.');
+    });
+  });
+
+  let PENDING_SAVE_DATA = null;
+
+  document.getElementById('svc-save-record').addEventListener('click', function () {
+    const data = {};
+    canvasEl.querySelectorAll('input[data-key], textarea[data-key], select[data-key]').forEach(function (el) {
+      const key = el.dataset.key;
+      data[key] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value;
+      el.classList.remove('svc-invalid');
+    });
+
+    // Required-field check -- highlight each offending box in red AND
+    // block the save, rather than silently saving an incomplete record.
+    const missing = FIELDS.filter(function (f) {
+      return f.required && f.type !== 'checkbox' && !(data[f.key] || '').toString().trim();
+    });
+    if (missing.length) {
+      missing.forEach(function (f) {
+        const el = canvasEl.querySelector('.svc-field-input[data-key="' + f.key + '"]');
+        if (el) el.classList.add('svc-invalid');
+      });
+      window.ntcToast('Please fill in: ' + missing.map(function (f) { return f.label; }).join(', '), true);
+      return;
+    }
+
+    // Second-layer check: a plain-language "does this look right?" recap
+    // before anything actually saves -- catches typos and wrong-field
+    // mix-ups a person would otherwise only notice after the fact.
+    PENDING_SAVE_DATA = data;
+    const body = document.getElementById('svc-review-body');
+    body.innerHTML = FIELDS.map(function (f) {
+      let shown;
+      if (f.type === 'checkbox') {
+        shown = data[f.key] ? 'Yes' : 'No';
+      } else {
+        const v = (data[f.key] || '').toString().trim();
+        shown = v ? window.ntcEsc(v) : '<span class="text-gray-400 italic">(blank)</span>';
+      }
+      return '<div class="flex items-start justify-between gap-3 border-b border-gray-100 pb-2">' +
+        '<span class="text-gray-500 shrink-0">' + window.ntcEsc(f.label) + (f.required ? ' <span class="text-red-500">*</span>' : '') + '</span>' +
+        '<span class="text-gray-800 text-right break-words">' + shown + '</span>' +
+      '</div>';
+    }).join('') || '<p class="text-gray-400">This service has no fields yet.</p>';
+    document.getElementById('svc-review-modal').classList.remove('hidden');
+  });
+
+  function closeReviewModal() {
+    document.getElementById('svc-review-modal').classList.add('hidden');
+    PENDING_SAVE_DATA = null;
+  }
+  document.getElementById('svc-review-close').addEventListener('click', closeReviewModal);
+  document.getElementById('svc-review-edit').addEventListener('click', closeReviewModal);
+
+  document.getElementById('svc-review-confirm').addEventListener('click', function (evt) {
+    if (!PENDING_SAVE_DATA) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const data = PENDING_SAVE_DATA;
+      const url = RECORD_ID ? '/api/services/' + SERVICE_ID + '/records/' + RECORD_ID : '/api/services/' + SERVICE_ID + '/records';
+      const r = await window.ntcFetchJSON(url, { method: RECORD_ID ? 'PUT' : 'POST', body: JSON.stringify({ data: data }) });
+      if (!r.ok) { window.ntcToast('Could not save the record.', true); return; }
+      document.getElementById('svc-review-modal').classList.add('hidden');
+      window.ntcToast('Saved.');
+      window.location.href = '/app/services/' + SERVICE_ID + '/records/' + r.body.id;
+    });
+  });
+
+  document.getElementById('svc-delete-record').addEventListener('click', function (evt) {
+    if (!RECORD_ID) return;
+    if (!confirm('Delete this record? This cannot be undone.')) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + RECORD_ID, { method: 'DELETE' });
+      if (!r.ok) { window.ntcToast('Could not delete the record.', true); return; }
+      window.location.href = '/app/services/' + SERVICE_ID + '/records';
+    });
+  });
+
+  async function load() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!r.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = r.body;
+    FIELDS = SERVICE.fields;
+    document.getElementById('svc-form-title').textContent = SERVICE.name + (RECORD_ID ? ' — Record #' + RECORD_ID : (DESIGN_ON ? ' — Design Fields' : ' — New Record'));
+    document.getElementById('svc-form-hint').textContent = DESIGN_ON
+      ? 'Add fields, drag them into place, resize, and set each one\'s name and type. Click "Save Field Layout" when done.'
+      : 'Fill in this record\'s information below, then click Save Record.';
+
+    if (RECORD_ID) {
+      const rr = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + RECORD_ID);
+      if (rr.ok) { RECORD_DATA = rr.body.data || {}; }
+      document.getElementById('svc-delete-record').classList.remove('hidden');
+      const pl = document.getElementById('svc-print-link');
+      pl.href = '/app/services/' + SERVICE_ID + '/records/' + RECORD_ID + '/print-preview';
+      pl.classList.remove('hidden');
+      document.getElementById('svc-attach-section').classList.remove('hidden');
+      await loadAttachments();
+    }
+    renderAll();
+  }
+
+  // ---- Attachments (only available once the record exists)
+  function readFileAsDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function loadAttachments() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + RECORD_ID + '/attachments');
+    const list = (r.body && r.body.attachments) || [];
+    const el = document.getElementById('svc-attach-list');
+    el.innerHTML = list.length ? list.map(function (a) {
+      return '<div class="flex items-center justify-between gap-2 border border-gray-100 rounded px-2 py-1.5">' +
+        '<a href="/api/services/' + SERVICE_ID + '/attachments/' + a.id + '/download" target="_blank" class="text-brand-600 hover:underline truncate">' + window.ntcEsc(a.filename) + '</a>' +
+        '<button data-id="' + a.id + '" class="svc-attach-del text-red-500 hover:underline text-xs shrink-0">Remove</button>' +
+      '</div>';
+    }).join('') : '<p class="text-xs text-gray-400">No attachments yet.</p>';
+    el.querySelectorAll('.svc-attach-del').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        if (!confirm('Remove this attachment?')) return;
+        await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/attachments/' + btn.dataset.id, { method: 'DELETE' });
+        loadAttachments();
+      });
+    });
+  }
+
+  document.getElementById('svc-attach-file').addEventListener('change', async function () {
+    const file = this.files[0];
+    if (!file) return;
+    const b64 = await readFileAsDataURL(file);
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + RECORD_ID + '/attachments', {
+      method: 'POST', body: JSON.stringify({ b64: b64, filename: file.name }),
+    });
+    this.value = '';
+    if (!r.ok) { window.ntcToast('Could not upload that file.', true); return; }
+    loadAttachments();
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

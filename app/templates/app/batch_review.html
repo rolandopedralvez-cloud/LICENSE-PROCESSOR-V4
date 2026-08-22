@@ -71,8 +71,13 @@
             {% for field, label in fields %}
             <div>
               <label class="block text-xs font-medium text-gray-500 mb-1">{{ label }}</label>
+              {% if field in ('freq1', 'freq2', 'freq3', 'freq4') %}
+              <textarea id="f_{{ field }}" name="{{ field }}" rows="3" placeholder="One frequency per line"
+                        class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
+              {% else %}
               <input id="f_{{ field }}" name="{{ field }}" type="text"
                      class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+              {% endif %}
             </div>
             {% endfor %}
           </div>
@@ -435,7 +440,9 @@ function renderBoxText(box, fields) {
   return box.paragraphs.map(function (p) {
     const spans = p.runs.map(function (r) {
       if (r.type === 'br') return '<br>';
-      const text = r.type === 'field' ? (fields[r.field] || '') : (r.text || '');
+      const text = r.type === 'field' ? (fields[r.field] || '')
+        : r.type === 'pagenum' ? ('(' + (Array.from(WORKING.keys()).indexOf(CURRENT) + 1) + '/' + WORKING.size + ')')
+        : (r.text || '');
       const style = 'font-size:' + (r.size || 10) + 'pt;font-weight:' + (r.bold ? '700' : '400') +
         ';font-family:' + cssFontFamily(r.font) + ';color:' + (r.color || '#000000') + ';';
       return '<span style="' + style + '">' + window.ntcEsc(text) + '</span>';

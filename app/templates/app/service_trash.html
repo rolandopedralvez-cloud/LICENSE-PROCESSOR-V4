@@ -1,0 +1,104 @@
+{% extends "app/_shell.html" %}
+{% block title %}Trash — NTC{% endblock %}
+{% block page_title %}<span id="svc-tr-title">Trash</span>{% endblock %}
+{% block page_subtitle %}Deleted records for this service -- restore them or permanently remove them.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Trash</li>
+{% endblock %}
+
+{% block app_content %}
+<div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500">
+  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+    <a id="svc-tr-back" class="text-xs text-brand-600 hover:underline">&larr; Back to Records</a>
+    <button id="svc-tr-empty" class="text-xs font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Empty Trash</button>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm border-collapse">
+      <thead class="bg-gray-50">
+        <tr class="text-left border-b border-gray-200">
+          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">#</th>
+          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Summary</th>
+          <th class="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Deleted</th>
+          <th class="py-2.5 px-4"></th>
+        </tr>
+      </thead>
+      <tbody id="svc-tr-tbody">
+        <tr><td colspan="4" class="text-center text-gray-400 py-6">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  let SERVICE = null;
+
+  document.getElementById('svc-tr-back').href = '/app/services/' + SERVICE_ID + '/records';
+
+  function renderRow(r) {
+    const labelField = SERVICE.fields[0] ? SERVICE.fields[0].key : null;
+    const summary = labelField ? (r.data[labelField] || '(no data)') : '(no fields)';
+    return '<tr class="border-b border-gray-100 hover:bg-gray-50">' +
+      '<td class="py-2 px-4 text-gray-500">' + r.id + '</td>' +
+      '<td class="py-2 px-4 text-gray-700">' + window.ntcEsc(summary) + '</td>' +
+      '<td class="py-2 px-4 text-gray-500">' + window.ntcEsc(r.deleted_at || '') + '</td>' +
+      '<td class="py-2 px-4 text-right whitespace-nowrap text-xs">' +
+        '<button data-id="' + r.id + '" class="svc-tr-restore text-brand-600 hover:underline mr-3">Restore</button>' +
+        '<button data-id="' + r.id + '" class="svc-tr-purge text-red-600 hover:underline">Delete Forever</button>' +
+      '</td>' +
+    '</tr>';
+  }
+
+  async function load() {
+    const sr = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!sr.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = sr.body;
+    document.getElementById('svc-tr-title').textContent = SERVICE.name + ' — Trash';
+
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/trash');
+    const list = (r.body && r.body.records) || [];
+    const tbody = document.getElementById('svc-tr-tbody');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400 py-6">Trash is empty.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(renderRow).join('');
+    tbody.querySelectorAll('.svc-tr-restore').forEach(function (btn) {
+      btn.addEventListener('click', function (evt) {
+        window.ntcBusy(evt.currentTarget, async function () {
+          const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + btn.dataset.id + '/restore', { method: 'POST' });
+          if (!r.ok) { window.ntcToast('Could not restore that record.', true); return; }
+          window.ntcToast('Restored.');
+          load();
+        });
+      });
+    });
+    tbody.querySelectorAll('.svc-tr-purge').forEach(function (btn) {
+      btn.addEventListener('click', function (evt) {
+        if (!confirm('Permanently delete this record? This cannot be undone.')) return;
+        window.ntcBusy(evt.currentTarget, async function () {
+          const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + btn.dataset.id + '/purge', { method: 'DELETE' });
+          if (!r.ok) { window.ntcToast('Could not delete that record.', true); return; }
+          window.ntcToast('Permanently deleted.');
+          load();
+        });
+      });
+    });
+  }
+
+  document.getElementById('svc-tr-empty').addEventListener('click', function (evt) {
+    if (!confirm('Permanently delete EVERYTHING in this service\'s trash? This cannot be undone.')) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/trash/empty', { method: 'POST' });
+      if (!r.ok) { window.ntcToast('Could not empty the trash.', true); return; }
+      window.ntcToast('Trash emptied.');
+      load();
+    });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

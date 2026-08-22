@@ -41,6 +41,68 @@ def update_print_template(data: dict = Body(...), request: Request = None):
     return {"ok": True}
 
 
+@router.post("/api/print-template/set-default")
+def set_default_print_template(request: Request):
+    """'Set as My Default' -- makes the CURRENT saved layout what 'Reset to
+    Default' recalls, instead of the original factory layout."""
+    require_permission(request, "can_print")
+    print_builtin.save_as_default(print_builtin.load_template())
+    return {"ok": True}
+
+
+@router.get("/api/print-template/history")
+def list_print_template_history(request: Request):
+    """Named/versioned layout saves -- newest last. Data itself isn't
+    included here (list view only) to keep this light; fetch a specific
+    entry's data via GET .../history/{id}."""
+    require_permission(request, "can_print")
+    entries = print_builtin.load_history()
+    return {"history": [{"id": e["id"], "name": e["name"], "saved_at": e["saved_at"]} for e in entries]}
+
+
+@router.post("/api/print-template/history")
+def save_print_template_history(data: dict = Body(...), request: Request = None):
+    """Saves the CURRENT in-browser layout (sent by the frontend, same as
+    PUT /api/print-template) as a new named history entry -- doesn't touch
+    the live template, just adds a recall point."""
+    require_permission(request, "can_print")
+    name = (data.get("name") or "").strip()
+    tpl = data.get("template")
+    if not tpl or "boxes" not in tpl:
+        raise HTTPException(400, "Missing template data to save")
+    entry = print_builtin.add_history_entry(name, tpl)
+    return {"ok": True, "id": entry["id"], "name": entry["name"], "saved_at": entry["saved_at"]}
+
+
+@router.get("/api/print-template/history/{entry_id}")
+def get_print_template_history_entry(entry_id: int, request: Request):
+    require_permission(request, "can_print")
+    entry = print_builtin.get_history_entry(entry_id)
+    if not entry:
+        raise HTTPException(404, "That saved layout no longer exists")
+    return entry["data"]
+
+
+@router.post("/api/print-template/history/{entry_id}/restore")
+def restore_print_template_history_entry(entry_id: int, request: Request):
+    """Loads a saved layout back as the LIVE template -- same effect as
+    pasting it in and clicking Save Layout."""
+    require_permission(request, "can_print")
+    entry = print_builtin.get_history_entry(entry_id)
+    if not entry:
+        raise HTTPException(404, "That saved layout no longer exists")
+    print_builtin.save_template(entry["data"])
+    return {"ok": True}
+
+
+@router.delete("/api/print-template/history/{entry_id}")
+def delete_print_template_history_entry(entry_id: int, request: Request):
+    require_permission(request, "can_print")
+    if not print_builtin.delete_history_entry(entry_id):
+        raise HTTPException(404, "That saved layout no longer exists")
+    return {"ok": True}
+
+
 @router.get("/api/print-data/{lic_id}")
 def get_print_data(lic_id: int, request: Request):
     """Every field on this record, formatted the same way the PDF export
@@ -89,10 +151,11 @@ def get_print_pdf_batch(ids: str, request: Request):
     zip_buf = io.BytesIO()
     used_names = set()
     added = 0
+    total = len(id_list)
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for lic_id in id_list:
+        for i, lic_id in enumerate(id_list, start=1):
             try:
-                pdf_bytes = print_builtin.build_pdf(lic_id)
+                pdf_bytes = print_builtin.build_pdf(lic_id, batch_index=i, batch_total=total)
             except Exception:
                 continue
             if pdf_bytes is None:

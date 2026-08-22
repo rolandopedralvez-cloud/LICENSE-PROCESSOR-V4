@@ -1,0 +1,79 @@
+{% extends "app/_shell.html" %}
+{% block title %}Board — NTC{% endblock %}
+{% block page_title %}<span id="svc-bd-title">Board</span>{% endblock %}
+{% block page_subtitle %}Records grouped into columns by whichever field you choose (e.g. Status).{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Board</li>
+{% endblock %}
+
+{% block app_content %}
+<div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
+  <a id="svc-bd-back" class="text-xs text-brand-600 hover:underline">&larr; Back to Records</a>
+  <div class="flex items-center gap-2 text-xs">
+    <label class="text-gray-500">Group by:</label>
+    <select id="svc-bd-field" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm"></select>
+  </div>
+</div>
+
+<div id="svc-bd-columns" class="flex gap-4 overflow-x-auto pb-4">
+  <p class="text-sm text-gray-400">Loading&hellip;</p>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  let SERVICE = null;
+
+  document.getElementById('svc-bd-back').href = '/app/services/' + SERVICE_ID + '/records';
+
+  function renderColumns(board) {
+    const el = document.getElementById('svc-bd-columns');
+    if (!board.field) {
+      el.innerHTML = '<div class="bg-white rounded-md shadow-sm p-8 text-center text-sm text-gray-400 w-full">Pick a field above to group records into columns (a dropdown-type field like Status works best).</div>';
+      return;
+    }
+    if (!board.columns.length) {
+      el.innerHTML = '<div class="bg-white rounded-md shadow-sm p-8 text-center text-sm text-gray-400 w-full">No records yet.</div>';
+      return;
+    }
+    el.innerHTML = board.columns.map(function (col) {
+      return '<div class="bg-gray-100 rounded-md p-3 w-64 shrink-0">' +
+        '<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">' + window.ntcEsc(col.name) + ' (' + col.cards.length + ')</h3>' +
+        '<div class="space-y-2">' + col.cards.map(function (c) {
+          return '<a href="/app/services/' + SERVICE_ID + '/records/' + c.id + '" class="block bg-white rounded shadow-sm px-3 py-2 text-sm hover:bg-brand-50">' +
+            window.ntcEsc(c.title || ('#' + c.id)) + '</a>';
+        }).join('') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  async function loadBoard() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/board');
+    if (r.ok) renderColumns(r.body);
+  }
+
+  document.getElementById('svc-bd-field').addEventListener('change', function (evt) {
+    window.ntcBusy(evt.currentTarget.parentElement, async function () {
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID, {
+        method: 'PUT', body: JSON.stringify({ board_field: evt.currentTarget.value }),
+      });
+      if (r.ok) loadBoard();
+    });
+  });
+
+  async function load() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!r.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = r.body;
+    document.getElementById('svc-bd-title').textContent = SERVICE.name + ' — Board';
+    const sel = document.getElementById('svc-bd-field');
+    sel.innerHTML = '<option value="">(none)</option>' + SERVICE.fields.map(function (f) {
+      return '<option value="' + f.key + '"' + (f.key === SERVICE.board_field ? ' selected' : '') + '>' + window.ntcEsc(f.label) + '</option>';
+    }).join('');
+    await loadBoard();
+  }
+  load();
+})();
+</script>
+{% endblock %}

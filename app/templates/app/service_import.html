@@ -1,0 +1,81 @@
+{% extends "app/_shell.html" %}
+{% block title %}Import Records — NTC{% endblock %}
+{% block page_title %}<span id="svc-imp-title">Import Records</span>{% endblock %}
+{% block page_subtitle %}Bulk-load records from an Excel file -- the first row's column headers are matched to this service's field names.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500"><a href="/app/services" class="hover:text-brand-600">Other Services</a></li>
+<li class="before:content-['/'] before:mx-1 text-gray-500">Import</li>
+{% endblock %}
+
+{% block app_content %}
+<div class="max-w-2xl">
+  <a id="svc-imp-back" class="text-xs text-brand-600 hover:underline">&larr; Back to Records</a>
+
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mt-3">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Choose a .xlsx file</h2>
+    </div>
+    <div class="p-4 space-y-4">
+      <p class="text-xs text-gray-500">
+        Column headers in the first row should match this service's field names exactly
+        (not case-sensitive). Any column that doesn't match a field is skipped and listed below --
+        nothing is guessed. This service's fields are: <span id="svc-imp-fieldlist" class="text-gray-700"></span>.
+      </p>
+      <input id="svc-imp-file" type="file" accept=".xlsx" class="block w-full text-sm border border-gray-300 rounded-md px-3 py-2">
+      <button id="svc-imp-go" class="text-xs font-medium bg-brand-600 text-white rounded-md px-4 py-2 hover:bg-brand-700">Import</button>
+      <div id="svc-imp-result" class="hidden text-sm bg-gray-50 border border-gray-200 rounded-md p-3"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const SERVICE_ID = {{ service_id }};
+  let SERVICE = null;
+
+  document.getElementById('svc-imp-back').href = '/app/services/' + SERVICE_ID + '/records';
+
+  async function load() {
+    const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID);
+    if (!r.ok) { window.ntcToast('That service could not be found.', true); return; }
+    SERVICE = r.body;
+    document.getElementById('svc-imp-title').textContent = SERVICE.name + ' — Import Records';
+    document.getElementById('svc-imp-fieldlist').textContent = SERVICE.fields.map(function (f) { return f.label; }).join(', ') || '(none yet)';
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById('svc-imp-go').addEventListener('click', function (evt) {
+    const file = document.getElementById('svc-imp-file').files[0];
+    if (!file) { window.ntcToast('Choose a .xlsx file first.', true); return; }
+    window.ntcBusy(evt.currentTarget, async function () {
+      const b64 = await readFileAsDataURL(file);
+      const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/import', {
+        method: 'POST', body: JSON.stringify({ b64: b64 }),
+      });
+      const box = document.getElementById('svc-imp-result');
+      box.classList.remove('hidden');
+      if (!r.ok) {
+        box.innerHTML = '<p class="text-red-600">' + window.ntcEsc((r.body && r.body.detail) || 'Import failed.') + '</p>';
+        return;
+      }
+      let html = '<p class="text-emerald-700 font-medium">' + r.body.created + ' record(s) created.</p>';
+      if (r.body.skipped) html += '<p class="text-gray-500 mt-1">' + r.body.skipped + ' blank row(s) skipped.</p>';
+      if (r.body.unmatched_columns && r.body.unmatched_columns.length) {
+        html += '<p class="text-amber-600 mt-1">Columns not matched to a field (ignored): ' + r.body.unmatched_columns.map(window.ntcEsc).join(', ') + '</p>';
+      }
+      box.innerHTML = html;
+    });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

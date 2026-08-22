@@ -81,6 +81,72 @@ def load_default_template():
         return load_template()
 
 
+def save_as_default(data):
+    """'Set as My Default' -- overwrites the factory copy with whatever the
+    current layout is, so 'Reset to Default' recalls this instead of the
+    original Word-doc-extracted layout."""
+    path = os.path.join(_project_root(), DEFAULT_TEMPLATE_FILE)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=1)
+
+
+# ---------------------------------------------------------- layout history
+# A simple named/versioned save history so a certain layout can be recalled
+# later -- e.g. save "Long bond paper" before experimenting, or keep a
+# handful of named layouts around for different document types. Stored as
+# one JSON file (a list of {id, name, saved_at, data}) next to the template
+# files; not meant for hundreds of entries, just a practical undo-across-
+# sessions net plus a few named presets.
+HISTORY_FILE = "print_template_history.json"
+
+
+def _history_path():
+    return os.path.join(_project_root(), HISTORY_FILE)
+
+
+def load_history():
+    path = _history_path()
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _save_history(entries):
+    with open(_history_path(), "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=1)
+
+
+def add_history_entry(name, data):
+    entries = load_history()
+    entry_id = (max((e["id"] for e in entries), default=0)) + 1
+    entry = {"id": entry_id, "name": (name or "Untitled layout").strip()[:80], "saved_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    entries.append(dict(entry, data=data))
+    # keep the newest 30 -- this is a practical recall list, not an archive
+    entries = entries[-30:]
+    _save_history(entries)
+    return entry
+
+
+def get_history_entry(entry_id):
+    for e in load_history():
+        if e["id"] == entry_id:
+            return e
+    return None
+
+
+def delete_history_entry(entry_id):
+    entries = load_history()
+    kept = [e for e in entries if e["id"] != entry_id]
+    if len(kept) == len(entries):
+        return False
+    _save_history(kept)
+    return True
+
+
 def fetch_record(lic_id):
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
@@ -120,11 +186,16 @@ def formatted_fields(record):
 
 
 # ---------------------------------------------------------------- PDF export
-def build_pdf(lic_id):
+def build_pdf(lic_id, batch_index=1, batch_total=1):
     """Renders the certificate to a PDF using the SAME template positions
     as the Live Preview, via reportlab (pure Python -- no Chrome/Word/Excel
     needed on the machine running this). Returns PDF bytes, or None if the
-    record doesn't exist."""
+    record doesn't exist.
+
+    batch_index/batch_total feed any "pagenum" box on the layout (e.g. a
+    "(2/8)" marker placed via Design Mode) -- a single ad-hoc PDF export
+    defaults to "(1/1)"; Mass Print (get_print_pdf_batch) passes this
+    record's real position in the batch."""
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.utils import ImageReader
     from reportlab.platypus import Paragraph
@@ -174,6 +245,12 @@ def build_pdf(lic_id):
                     continue
                 if run.get("type") == "field":
                     text = values.get(run.get("field"), "")
+                elif run.get("type") == "pagenum":
+                    # Batch page numbering ("(2/8)" etc.) -- batch_index/
+                    # batch_total are only set when this PDF is one page of
+                    # a Mass Print batch (see get_print_pdf_batch); a single
+                    # ad-hoc PDF export just shows "(1/1)".
+                    text = f"({batch_index}/{batch_total})"
                 else:
                     text = run.get("text", "")
                 if not text:
@@ -182,7 +259,10 @@ def build_pdf(lic_id):
                 base_font = run.get("font", "Helvetica") or "Helvetica"
                 if base_font not in ("Helvetica", "Times-Roman", "Courier"):
                     base_font = "Helvetica"  # unknown/legacy font name -- fall back rather than error
-                escaped = saxutils.escape(text)
+                # A field like Frequency often has several TX/RX lines typed
+                # with line breaks -- reportlab's markup only respects <br/>,
+                # not a literal newline, so convert after escaping.
+                escaped = saxutils.escape(text).replace("\n", "<br/>")
                 if run.get("bold"):
                     escaped = f"<b>{escaped}</b>"
                 color = run.get("color")

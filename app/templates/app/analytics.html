@@ -129,13 +129,19 @@
   <div class="bg-white rounded-md shadow-sm border-t-4 border-sky-500">
     <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
       <h2 class="font-medium text-gray-700 text-sm">Pinned Stations</h2>
-      <button id="btn-map-clear" class="text-xs text-gray-400 hover:text-gray-700">Clear</button>
+      <div class="flex items-center gap-2">
+        <button id="btn-map-expand" class="text-xs text-gray-400 hover:text-gray-700" title="Expand to full screen">&#10021; Expand</button>
+        <button id="btn-map-clear" class="text-xs text-gray-400 hover:text-gray-700">Clear</button>
+      </div>
     </div>
     <div class="p-4">
       <p class="text-xs text-gray-400 mb-2">
         Check records anywhere on this page — Detail rows, a Pivot selection, or an OR Folder — and they show up here immediately, colored by carrier.
       </p>
-      <div id="an-map" class="rounded-md border border-gray-200" style="height:420px;"></div>
+      <div id="an-map-wrap" class="ntc-map-wrap">
+        <button id="btn-map-collapse" class="ntc-map-close hidden" title="Exit full screen">&times;</button>
+        <div id="an-map" class="rounded-md border border-gray-200" style="height:420px;"></div>
+      </div>
       <div id="an-map-label" class="text-xs text-gray-500 mt-2">Nothing pinned yet.</div>
     </div>
   </div>
@@ -273,6 +279,7 @@ document.getElementById('btn-map-clear').addEventListener('click', function () {
   refreshAnMap();
 });
 initAnMap();
+window.ntcExpandMap('an-map-wrap', 'btn-map-expand', 'btn-map-collapse', function () { return anMap; });
 
 // ---- detail ----
 let DETAIL_ROWS = [];

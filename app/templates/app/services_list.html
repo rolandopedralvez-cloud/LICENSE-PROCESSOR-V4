@@ -1,0 +1,210 @@
+{% extends "app/_shell.html" %}
+{% block title %}Other Services — NTC{% endblock %}
+{% block page_title %}Other Services{% endblock %}
+{% block page_subtitle %}Every service besides Telco RSL licensing lives here -- its own categories, custom fields, print design, and analytics.{% endblock %}
+{% block breadcrumb %}
+<li class="before:content-['/'] before:mx-1 text-gray-500">Other Services</li>
+{% endblock %}
+
+{% block app_content %}
+<div class="max-w-4xl">
+
+  <div class="bg-white rounded-md shadow-sm border-t-4 border-brand-500 mb-6">
+    <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+      <h2 class="font-medium text-gray-700 text-sm">Your Services</h2>
+      <button id="btn-new-service" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">+ Add Service</button>
+    </div>
+    <div id="svc-list" class="divide-y divide-gray-100">
+      <p class="text-sm text-gray-400 px-4 py-6 text-center">Loading&hellip;</p>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-400">Telco RSL licensing is unaffected by anything here -- it keeps using its own Licenses / Batch Renew / Print Preview pages.</p>
+</div>
+
+<!-- ============================== New Service modal ============================== -->
+<div id="svc-new-modal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-md shadow-lg w-full max-w-md">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h3 class="font-medium text-gray-700 text-sm">Add a Service</h3>
+      <button id="svc-new-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+    </div>
+    <div class="p-4 space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Service name</label>
+        <input id="svc-new-name" type="text" placeholder="e.g. Water Permit" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Type of Service</label>
+        <div class="flex gap-1">
+          <select id="svc-new-type" class="flex-1 border border-gray-300 rounded-md px-2 py-2 text-sm"><option value="">(none)</option></select>
+          <button id="svc-new-type-add" type="button" class="text-xs border border-gray-300 rounded-md px-2 hover:bg-gray-50">+ New</button>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Nature of Service</label>
+        <div class="flex gap-1">
+          <select id="svc-new-nature" class="flex-1 border border-gray-300 rounded-md px-2 py-2 text-sm"><option value="">(none)</option></select>
+          <button id="svc-new-nature-add" type="button" class="text-xs border border-gray-300 rounded-md px-2 hover:bg-gray-50">+ New</button>
+        </div>
+      </div>
+    </div>
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+      <button id="svc-new-cancel" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Cancel</button>
+      <button id="svc-new-save" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Create Service</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== Restrict Access modal (super_admin only) ============================== -->
+<div id="restrict-modal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-md shadow-lg w-full max-w-sm">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h3 class="font-medium text-gray-700 text-sm">Restrict Access</h3>
+      <button id="restrict-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-gray-500 mb-3">Check the users who should be able to see and use this service. Leave everyone unchecked to keep it open to anyone with the right permissions (the default).</p>
+      <div id="restrict-list" class="space-y-1 max-h-64 overflow-y-auto"></div>
+    </div>
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+      <button id="restrict-cancel" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Cancel</button>
+      <button id="restrict-save" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let TYPES = [], NATURES = [];
+
+  function fmtCat(id, list) {
+    const m = list.find(function (x) { return x.id === id; });
+    return m ? m.name : '—';
+  }
+
+  async function loadCategories() {
+    const [t, n] = await Promise.all([
+      window.ntcFetchJSON('/api/service-types'),
+      window.ntcFetchJSON('/api/service-natures'),
+    ]);
+    TYPES = (t.body && t.body.types) || [];
+    NATURES = (n.body && n.body.natures) || [];
+    fillSelect('svc-new-type', TYPES);
+    fillSelect('svc-new-nature', NATURES);
+  }
+
+  function fillSelect(id, list) {
+    const el = document.getElementById(id);
+    const cur = el.value;
+    el.innerHTML = '<option value="">(none)</option>' + list.map(function (x) {
+      return '<option value="' + x.id + '">' + window.ntcEsc(x.name) + '</option>';
+    }).join('');
+    el.value = cur;
+  }
+
+  async function loadServices() {
+    const r = await window.ntcFetchJSON('/api/services');
+    const list = (r.body && r.body.services) || [];
+    const el = document.getElementById('svc-list');
+    if (!list.length) {
+      el.innerHTML = '<p class="text-sm text-gray-400 px-4 py-6 text-center">No services yet -- click "+ Add Service" to create your first one.</p>';
+      return;
+    }
+    el.innerHTML = list.map(function (s) {
+      return '<div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-gray-50">' +
+        '<div class="min-w-0">' +
+          '<p class="text-sm font-medium text-gray-800 truncate">' + window.ntcEsc(s.name) + '</p>' +
+          '<p class="text-xs text-gray-400 mt-0.5">' + window.ntcEsc(fmtCat(s.type_id, TYPES)) + ' &middot; ' + window.ntcEsc(fmtCat(s.nature_id, NATURES)) + ' &middot; ' + s.fields.length + ' field(s)</p>' +
+        '</div>' +
+        '<div class="flex items-center gap-1 text-xs shrink-0">' +
+          '<a href="/app/services/' + s.id + '/design" class="border border-gray-300 rounded-md px-2 py-1.5 hover:bg-gray-50">Design Fields</a>' +
+          '<a href="/app/services/' + s.id + '/records" class="border border-gray-300 rounded-md px-2 py-1.5 hover:bg-gray-50">Records</a>' +
+          '<a href="/app/services/' + s.id + '/analytics" class="border border-gray-300 rounded-md px-2 py-1.5 hover:bg-gray-50">Analytics</a>' +
+          (window.ntcRole() === 'super_admin' ? '<button data-id="' + s.id + '" class="svc-restrict-btn border border-gray-300 rounded-md px-2 py-1.5 hover:bg-gray-50">Restrict Access</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    el.querySelectorAll('.svc-restrict-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { openRestrictModal(parseInt(btn.dataset.id, 10)); });
+    });
+  }
+
+  // ---- Restrict Access (super_admin only)
+  let ALL_USERNAMES = [];
+  async function openRestrictModal(serviceId) {
+    const [sr, ur] = await Promise.all([
+      window.ntcFetchJSON('/api/services/' + serviceId),
+      window.ntcFetchJSON('/api/users'),
+    ]);
+    if (!sr.ok) { window.ntcToast('Could not load that service.', true); return; }
+    const svc = sr.body;
+    ALL_USERNAMES = ((ur.body && ur.body.users) || []).map(function (u) { return u.username; });
+    const restricted = svc.restricted_users || [];
+    const el = document.getElementById('restrict-list');
+    el.innerHTML = ALL_USERNAMES.map(function (u) {
+      return '<label class="flex items-center gap-2 text-sm py-1"><input type="checkbox" value="' + window.ntcEsc(u) + '"' + (restricted.indexOf(u) !== -1 ? ' checked' : '') + '> ' + window.ntcEsc(u) + '</label>';
+    }).join('') || '<p class="text-xs text-gray-400">No other users yet.</p>';
+    document.getElementById('restrict-modal').dataset.serviceId = serviceId;
+    document.getElementById('restrict-modal').classList.remove('hidden');
+  }
+  document.getElementById('restrict-close').addEventListener('click', function () { document.getElementById('restrict-modal').classList.add('hidden'); });
+  document.getElementById('restrict-cancel').addEventListener('click', function () { document.getElementById('restrict-modal').classList.add('hidden'); });
+  document.getElementById('restrict-save').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const serviceId = document.getElementById('restrict-modal').dataset.serviceId;
+      const usernames = Array.from(document.querySelectorAll('#restrict-list input:checked')).map(function (cb) { return cb.value; });
+      const r = await window.ntcFetchJSON('/api/services/' + serviceId + '/restricted-users', {
+        method: 'PUT', body: JSON.stringify({ usernames: usernames }),
+      });
+      if (!r.ok) { window.ntcToast('Could not save access settings.', true); return; }
+      document.getElementById('restrict-modal').classList.add('hidden');
+      window.ntcToast(usernames.length ? 'Access restricted to ' + usernames.length + ' user(s).' : 'Access restriction removed -- everyone can use this service again.');
+    });
+  });
+
+  document.getElementById('btn-new-service').addEventListener('click', function () {
+    document.getElementById('svc-new-modal').classList.remove('hidden');
+  });
+  document.getElementById('svc-new-close').addEventListener('click', close);
+  document.getElementById('svc-new-cancel').addEventListener('click', close);
+  function close() {
+    document.getElementById('svc-new-modal').classList.add('hidden');
+    document.getElementById('svc-new-name').value = '';
+  }
+
+  document.getElementById('svc-new-type-add').addEventListener('click', async function () {
+    const name = prompt('New Type of Service:');
+    if (!name) return;
+    const r = await window.ntcFetchJSON('/api/service-types', { method: 'POST', body: JSON.stringify({ name: name }) });
+    if (r.ok) { await loadCategories(); document.getElementById('svc-new-type').value = r.body.id; }
+  });
+  document.getElementById('svc-new-nature-add').addEventListener('click', async function () {
+    const name = prompt('New Nature of Service:');
+    if (!name) return;
+    const r = await window.ntcFetchJSON('/api/service-natures', { method: 'POST', body: JSON.stringify({ name: name }) });
+    if (r.ok) { await loadCategories(); document.getElementById('svc-new-nature').value = r.body.id; }
+  });
+
+  document.getElementById('svc-new-save').addEventListener('click', function (evt) {
+    window.ntcBusy(evt.currentTarget, async function () {
+      const name = document.getElementById('svc-new-name').value.trim();
+      if (!name) { window.ntcToast('Give the service a name first.', true); return; }
+      const type_id = document.getElementById('svc-new-type').value || null;
+      const nature_id = document.getElementById('svc-new-nature').value || null;
+      const r = await window.ntcFetchJSON('/api/services', {
+        method: 'POST', body: JSON.stringify({ name: name, type_id: type_id, nature_id: nature_id }),
+      });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not create the service.', true); return; }
+      close();
+      window.location.href = '/app/services/' + r.body.id + '/design';
+    });
+  });
+
+  (async function () {
+    await loadCategories();
+    await loadServices();
+  })();
+})();
+</script>
+{% endblock %}
