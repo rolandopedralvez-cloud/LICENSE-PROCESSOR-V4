@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+telco.db
+venv/
+scanned_uploads/
