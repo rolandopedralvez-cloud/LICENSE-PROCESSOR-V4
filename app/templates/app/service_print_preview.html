@@ -88,7 +88,7 @@
     </label>
     <button id="ppv-font-hide" class="text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Turns the text white so it's invisible on this printout">Hide (white)</button>
     <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Back to black text">Unhide</button>
-    <span class="text-gray-400 ml-1">(double-click text to edit)</span>
+    <span class="text-gray-400 ml-1" title="e.g. type Owner: {owner_name} to mix plain text with a live field">(double-click text to edit -- type {fieldname} for a merge field)</span>
   </div>
 
   <p id="ppv-status" class="no-print text-center text-sm text-gray-500 py-2"></p>
@@ -588,16 +588,15 @@
     const box = findBox(boxEl.dataset.id);
     selectBox(boxEl);
 
-    // Boxes that pull from a database field (e.g. BW & Emission, Capacity)
-    // can't be typed over directly -- doing so used to freeze the live field
-    // into permanent literal text like "{bw_emission}", silently breaking
-    // that field on every future record. Font/size/bold and drag/resize
-    // still work on these boxes; only free-typing is blocked. Boxes with no
-    // field runs (including any "+ Insert Text Box" box) can still be
-    // double-clicked and edited normally.
-    const hasField = box.paragraphs.some(function (p) { return p.runs.some(function (r) { return r.type === 'field' || r.type === 'pagenum'; }); });
-    if (hasField) {
-      window.ntcToast('This box shows a database field or the page counter -- its text can\'t be typed over, or that live content would be lost. Use the font/size/bold controls above, or drag/resize instead.', true);
+    // The page counter box is the one thing that can't be typed over --
+    // it's a special auto-incrementing marker (see "+ Insert Page Number"),
+    // not something a merge field syntax could represent. Every other box,
+    // including ones already showing a database field, can be double-clicked
+    // and edited -- see parseMergeText() below for how typed "{fieldname}"
+    // text turns into a live merge field again on save.
+    const hasPagenum = box.paragraphs.some(function (p) { return p.runs.some(function (r) { return r.type === 'pagenum'; }); });
+    if (hasPagenum) {
+      window.ntcToast('This box is the page counter -- it can\'t be typed over. Use the font/size/bold controls above, or drag/resize instead.', true);
       return;
     }
 
@@ -613,13 +612,37 @@
     boxEl.focus();
     document.execCommand('selectAll', false, null);
 
+    // ---- Merge fields -- typing "{fieldname}" anywhere in a box's text
+    // turns that exact token into a live database field on save, mixed
+    // freely with plain text and other merge fields in the same box (e.g.
+    // "Owner: {owner_name}"). Unrecognized field names are left as plain
+    // text (braces and all) rather than silently dropped, and the fields
+    // that didn't match get called out in a toast so a typo is obvious.
+    function parseMergeText(text) {
+      const unknown = [];
+      const paragraphs = text.split('\n').map(function (line) {
+        const parts = line.split(/(\{[a-zA-Z0-9_]+\})/g).filter(function (s) { return s !== ''; });
+        const runs = parts.map(function (part) {
+          const m = part.match(/^\{([a-zA-Z0-9_]+)\}$/);
+          if (m && Object.prototype.hasOwnProperty.call(FIELDS, m[1])) {
+            return { type: 'field', field: m[1], bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' };
+          }
+          if (m) unknown.push(m[1]);
+          return { type: 'text', text: part, bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' };
+        });
+        if (!runs.length) runs.push({ type: 'text', text: '', bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' });
+        return { align: (box.paragraphs[0] && box.paragraphs[0].align) || 'left', runs: runs };
+      });
+      return { paragraphs: paragraphs, unknown: unknown };
+    }
+
     function finishEdit() {
       boxEl.contentEditable = 'false';
-      const newText = boxEl.textContent;
-      box.paragraphs = [{
-        align: (box.paragraphs[0] && box.paragraphs[0].align) || 'left',
-        runs: [{ type: 'text', text: newText, bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' }],
-      }];
+      const parsed = parseMergeText(boxEl.textContent);
+      box.paragraphs = parsed.paragraphs;
+      if (parsed.unknown.length) {
+        window.ntcToast('Not a recognized field, kept as plain text: {' + parsed.unknown.join('}, {') + '}', true);
+      }
       refreshBoxDom(box, boxEl);
       boxEl.removeEventListener('blur', finishEdit);
     }

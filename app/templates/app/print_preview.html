@@ -40,8 +40,6 @@
     <button id="ppv-undo" class="hidden text-xs font-medium border border-gray-300 rounded-md px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-40" title="Undo (Ctrl+Z)">&#8630; Undo</button>
     <button id="ppv-redo" class="hidden text-xs font-medium border border-gray-300 rounded-md px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-40" title="Redo (Ctrl+Y)">&#8631; Redo</button>
 
-    <button id="ppv-toolbar-mode" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50" title="Choose whether the floating box toolbar follows each box you select, or stays put where you leave it">Toolbar: Follow box</button>
-
     <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">+ Insert Text Box</button>
     <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Insert Page Number</button>
     <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Delete Box</button>
@@ -65,8 +63,7 @@
   </div>
 
   <!-- floating box-editor mini toolbar (design mode only) -->
-  <div id="ppv-box-toolbar" class="no-print hidden fixed z-30 bg-gray-800 text-white rounded-md shadow-lg px-2 py-1.5 flex items-center gap-2 text-xs">
-    <span id="ppv-toolbar-handle" class="text-gray-400 hover:text-white px-0.5 -ml-1 select-none" style="cursor:move;" title="Drag to move this bar out of the way">&#10021;</span>
+  <div id="ppv-box-toolbar" class="no-print hidden fixed left-0 right-0 z-30 bg-gray-800 text-white shadow-lg px-4 py-1.5 flex items-center gap-2 text-xs flex-wrap">
     <select id="ppv-font-family" class="bg-gray-700 text-white rounded px-1.5 py-1 text-xs border-none">
       <option value="Helvetica">Sans-serif</option>
       <option value="Times-Roman">Serif</option>
@@ -88,7 +85,29 @@
     </label>
     <button id="ppv-font-hide" class="text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Turns the text white so it's invisible on this printout">Hide (white)</button>
     <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Back to black text">Unhide</button>
-    <span class="text-gray-400 ml-1">(double-click text to edit)</span>
+    <button id="ppv-edit-fieldval" class="hidden text-xs font-medium border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Fix the actual stored value for this record's field -- e.g. clean up messy Frequency text">Edit Value&hellip;</button>
+    <span class="text-gray-400 ml-1" title="e.g. type Owner: {licensee} to mix plain text with a live field">(double-click text to edit -- type {fieldname} for a merge field)</span>
+  </div>
+
+  <!-- ============================== Edit field value modal ============================== -->
+  <div id="ppv-fieldval-modal" class="no-print hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-md shadow-lg w-full max-w-lg">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-medium text-gray-700 text-sm">Edit <span id="ppv-fieldval-name" class="font-semibold"></span> for this record</h3>
+        <button id="ppv-fieldval-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-500 mb-2">
+          This changes the actual data stored for this one record (not just how it prints) -- handy for cleaning up
+          messy leftover text like a repeated label or a duplicated value. Nothing else on this certificate is affected.
+        </p>
+        <textarea id="ppv-fieldval-textarea" rows="5" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
+      </div>
+      <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+        <button id="ppv-fieldval-cancel" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Cancel</button>
+        <button id="ppv-fieldval-save" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save</button>
+      </div>
+    </div>
   </div>
 
   <p id="ppv-status" class="no-print text-center text-sm text-gray-500 py-2"></p>
@@ -322,68 +341,15 @@
     el.appendChild(handle);
   }
 
-  function positionBoxToolbar(el) {
-    if (typeof TOOLBAR_MODE !== 'undefined' && TOOLBAR_MODE === 'docked') {
-      const saved = localStorage.getItem('ntc_ppv_toolbar_docked_pos');
-      if (saved) {
-        try {
-          const pos = JSON.parse(saved);
-          boxToolbar.style.left = pos.left + 'px';
-          boxToolbar.style.top = pos.top + 'px';
-          return;
-        } catch (e) { /* fall through to default position below */ }
-      }
-      boxToolbar.style.left = '16px';
-      boxToolbar.style.top = '60px';
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    boxToolbar.style.left = (r.left + window.scrollX) + 'px';
-    boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
+  // ---- the box toolbar is pinned to the top of the page, directly under
+  // the main toolbar -- it no longer follows the selected box around or
+  // drags, so it always stays put exactly where you expect it.
+  const mainToolbarEl = document.getElementById('ppv-toolbar');
+  function positionBoxToolbar() {
+    boxToolbar.style.left = '0px';
+    boxToolbar.style.top = mainToolbarEl.getBoundingClientRect().bottom + 'px';
   }
-
-  // ---- the floating box toolbar can be dragged out of the way (e.g. when
-  // it sits right on top of the certificate text it's editing) using the
-  // small handle at its left edge. It snaps back to sitting above whatever
-  // box you select next -- this only moves it out of the way for the box
-  // you're currently working on.
-  let tbDrag = null;
-  document.getElementById('ppv-toolbar-handle').addEventListener('mousedown', function (evt) {
-    const r = boxToolbar.getBoundingClientRect();
-    tbDrag = {
-      startX: evt.clientX, startY: evt.clientY,
-      startLeft: r.left + window.scrollX, startTop: r.top + window.scrollY,
-    };
-    evt.preventDefault();
-  });
-  document.addEventListener('mousemove', function (evt) {
-    if (!tbDrag) return;
-    boxToolbar.style.left = (tbDrag.startLeft + evt.clientX - tbDrag.startX) + 'px';
-    boxToolbar.style.top = (tbDrag.startTop + evt.clientY - tbDrag.startY) + 'px';
-    if (TOOLBAR_MODE === 'docked') saveDockedPos();
-  });
-  document.addEventListener('mouseup', function () { tbDrag = null; });
-
-  // ---- toolbar mode: "Follow box" (default) repositions the toolbar above
-  // whatever box you select; "Docked" keeps it wherever you last dragged it
-  // (saved in this browser) no matter which box you select next -- pick
-  // whichever fits how you like to work.
-  let TOOLBAR_MODE = localStorage.getItem('ntc_ppv_toolbar_mode') || 'follow';
-  const toolbarModeBtn = document.getElementById('ppv-toolbar-mode');
-  function saveDockedPos() {
-    const r = boxToolbar.getBoundingClientRect();
-    localStorage.setItem('ntc_ppv_toolbar_docked_pos', JSON.stringify({ left: r.left + window.scrollX, top: r.top + window.scrollY }));
-  }
-  function applyToolbarModeLabel() {
-    toolbarModeBtn.textContent = 'Toolbar: ' + (TOOLBAR_MODE === 'docked' ? 'Docked' : 'Follow box');
-  }
-  applyToolbarModeLabel();
-  toolbarModeBtn.addEventListener('click', function () {
-    TOOLBAR_MODE = TOOLBAR_MODE === 'docked' ? 'follow' : 'docked';
-    localStorage.setItem('ntc_ppv_toolbar_mode', TOOLBAR_MODE);
-    applyToolbarModeLabel();
-    if (TOOLBAR_MODE === 'docked' && SELECTED_BOX) saveDockedPos();
-  });
+  window.addEventListener('resize', function () { if (!boxToolbar.classList.contains('hidden')) positionBoxToolbar(); });
 
   // ---------------------------------------------------------------- Undo / Redo
   // A plain snapshot-based undo stack -- simple and reliable for a document
@@ -458,9 +424,61 @@
     fontColorInput.value = color;
     hideBtn.classList.toggle('hidden', color.toLowerCase() === '#ffffff');
     unhideBtn.classList.toggle('hidden', color.toLowerCase() !== '#ffffff');
-    positionBoxToolbar(el);
+
+    // "Edit Value..." -- only offered when this box shows exactly one
+    // database field and nothing else, so there's no ambiguity about which
+    // value would be edited.
+    const fieldRuns = [];
+    box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type === 'field') fieldRuns.push(r.field); }); });
+    const editValBtn = document.getElementById('ppv-edit-fieldval');
+    if (fieldRuns.length === 1) {
+      editValBtn.classList.remove('hidden');
+      editValBtn.dataset.field = fieldRuns[0];
+    } else {
+      editValBtn.classList.add('hidden');
+      delete editValBtn.dataset.field;
+    }
+
+    positionBoxToolbar();
     boxToolbar.classList.remove('hidden');
   }
+
+  // ---- "Edit Value..." -- fixes the actual stored data for this one
+  // record's field (e.g. a messy Frequency value), separate from anything
+  // about the box's position/font/etc. Prefilled with the same cleaned-up
+  // text the box is currently showing, since that's the easiest starting
+  // point for trimming out a leftover duplicate/label.
+  const fieldValModal = document.getElementById('ppv-fieldval-modal');
+  const fieldValTextarea = document.getElementById('ppv-fieldval-textarea');
+  const fieldValName = document.getElementById('ppv-fieldval-name');
+  document.getElementById('ppv-edit-fieldval').addEventListener('click', function (evt) {
+    const field = evt.currentTarget.dataset.field;
+    if (!field) return;
+    fieldValName.textContent = field;
+    fieldValTextarea.value = FIELDS[field] || '';
+    fieldValModal.dataset.field = field;
+    fieldValModal.classList.remove('hidden');
+    fieldValTextarea.focus();
+  });
+  function closeFieldValModal() { fieldValModal.classList.add('hidden'); }
+  document.getElementById('ppv-fieldval-close').addEventListener('click', closeFieldValModal);
+  document.getElementById('ppv-fieldval-cancel').addEventListener('click', closeFieldValModal);
+  document.getElementById('ppv-fieldval-save').addEventListener('click', function (evt) {
+    const field = fieldValModal.dataset.field;
+    if (!field) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const newValue = fieldValTextarea.value;
+      const r = await window.ntcFetchJSON('/api/licenses/' + LIC_ID, {
+        method: 'PUT', body: JSON.stringify({ [field]: newValue }),
+      });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not save that change.', true); return; }
+      const dataRes = await window.ntcFetchJSON('/api/print-data/' + LIC_ID);
+      if (dataRes.ok) FIELDS = dataRes.body.fields || FIELDS;
+      renderAll();
+      closeFieldValModal();
+      window.ntcToast('Saved.');
+    });
+  });
 
   function adjustFont(delta) {
     if (!SELECTED_BOX) return;
@@ -575,6 +593,38 @@
     renderAll();
   });
 
+  // ---- Copy / Paste a box (Ctrl+C / Ctrl+V) -- duplicates the selected
+  // box's full styling (field/text, font, size, color, etc.), offset a bit
+  // so the copy doesn't sit exactly on top of the original. Works for any
+  // box, including ones bound to a database field.
+  let CLIPBOARD_BOX = null;
+  document.addEventListener('keydown', function (evt) {
+    if (!DESIGN_ON) return;
+    if (document.activeElement && document.activeElement.contentEditable === 'true') return;
+    if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    const ctrl = evt.ctrlKey || evt.metaKey;
+    if (!ctrl) return;
+    const k = evt.key.toLowerCase();
+    if (k === 'c') {
+      if (!SELECTED_BOX) return;
+      evt.preventDefault();
+      CLIPBOARD_BOX = JSON.parse(JSON.stringify(findBox(SELECTED_BOX.dataset.id)));
+      window.ntcToast('Box copied -- press Ctrl+V to paste it.');
+    } else if (k === 'v') {
+      if (!CLIPBOARD_BOX) return;
+      evt.preventDefault();
+      pushUndo();
+      const box = JSON.parse(JSON.stringify(CLIPBOARD_BOX));
+      box.id = 'copy' + Date.now() + '_' + (nextCustomId++);
+      box.x = (box.x || 0) + 14;
+      box.y = (box.y || 0) + 14;
+      TEMPLATE.boxes.push(box);
+      renderAll();
+      const el = pageEl.querySelector('.ppv-box[data-id="' + box.id + '"]');
+      if (el) selectBox(el);
+    }
+  });
+
   // ---- inline text editing: double-click a box in Design mode to type
   // directly into it. Collapses the box down to one paragraph/one run on
   // save (keeping the first run's font/size/bold) -- simpler than trying
@@ -586,16 +636,15 @@
     const box = findBox(boxEl.dataset.id);
     selectBox(boxEl);
 
-    // Boxes that pull from a database field (e.g. BW & Emission, Capacity)
-    // can't be typed over directly -- doing so used to freeze the live field
-    // into permanent literal text like "{bw_emission}", silently breaking
-    // that field on every future record. Font/size/bold and drag/resize
-    // still work on these boxes; only free-typing is blocked. Boxes with no
-    // field runs (including any "+ Insert Text Box" box) can still be
-    // double-clicked and edited normally.
-    const hasField = box.paragraphs.some(function (p) { return p.runs.some(function (r) { return r.type === 'field' || r.type === 'pagenum'; }); });
-    if (hasField) {
-      window.ntcToast('This box shows a database field or the page counter -- its text can\'t be typed over, or that live content would be lost. Use the font/size/bold controls above, or drag/resize instead.', true);
+    // The page counter box is the one thing that can't be typed over --
+    // it's a special auto-incrementing marker (see "+ Insert Page Number"),
+    // not something a merge field syntax could represent. Every other box,
+    // including ones already showing a database field, can be double-clicked
+    // and edited -- see parseMergeText() below for how typed "{fieldname}"
+    // text turns into a live merge field again on save.
+    const hasPagenum = box.paragraphs.some(function (p) { return p.runs.some(function (r) { return r.type === 'pagenum'; }); });
+    if (hasPagenum) {
+      window.ntcToast('This box is the page counter -- it can\'t be typed over. Use the font/size/bold controls above, or drag/resize instead.', true);
       return;
     }
 
@@ -611,13 +660,37 @@
     boxEl.focus();
     document.execCommand('selectAll', false, null);
 
+    // ---- Merge fields -- typing "{fieldname}" anywhere in a box's text
+    // turns that exact token into a live database field on save, mixed
+    // freely with plain text and other merge fields in the same box (e.g.
+    // "Owner: {owner_name}"). Unrecognized field names are left as plain
+    // text (braces and all) rather than silently dropped, and the fields
+    // that didn't match get called out in a toast so a typo is obvious.
+    function parseMergeText(text) {
+      const unknown = [];
+      const paragraphs = text.split('\n').map(function (line) {
+        const parts = line.split(/(\{[a-zA-Z0-9_]+\})/g).filter(function (s) { return s !== ''; });
+        const runs = parts.map(function (part) {
+          const m = part.match(/^\{([a-zA-Z0-9_]+)\}$/);
+          if (m && Object.prototype.hasOwnProperty.call(FIELDS, m[1])) {
+            return { type: 'field', field: m[1], bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' };
+          }
+          if (m) unknown.push(m[1]);
+          return { type: 'text', text: part, bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' };
+        });
+        if (!runs.length) runs.push({ type: 'text', text: '', bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' });
+        return { align: (box.paragraphs[0] && box.paragraphs[0].align) || 'left', runs: runs };
+      });
+      return { paragraphs: paragraphs, unknown: unknown };
+    }
+
     function finishEdit() {
       boxEl.contentEditable = 'false';
-      const newText = boxEl.textContent;
-      box.paragraphs = [{
-        align: (box.paragraphs[0] && box.paragraphs[0].align) || 'left',
-        runs: [{ type: 'text', text: newText, bold: !!firstRun.bold, size: firstRun.size || 10, font: firstRun.font || 'Helvetica' }],
-      }];
+      const parsed = parseMergeText(boxEl.textContent);
+      box.paragraphs = parsed.paragraphs;
+      if (parsed.unknown.length) {
+        window.ntcToast('Not a recognized field, kept as plain text: {' + parsed.unknown.join('}, {') + '}', true);
+      }
       refreshBoxDom(box, boxEl);
       boxEl.removeEventListener('blur', finishEdit);
     }
@@ -657,11 +730,6 @@
       drag.box.h = Math.max(10, drag.startH + dy);
       drag.boxEl.style.width = drag.box.w + 'pt';
       drag.boxEl.style.height = drag.box.h + 'pt';
-    }
-    if (SELECTED_BOX === drag.boxEl && TOOLBAR_MODE !== 'docked') {
-      const r = drag.boxEl.getBoundingClientRect();
-      boxToolbar.style.left = (r.left + window.scrollX) + 'px';
-      boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
     }
   });
   document.addEventListener('mouseup', function () { drag = null; });
@@ -726,7 +794,6 @@
     document.getElementById('ppv-page-size').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-undo').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-redo').classList.toggle('hidden', !DESIGN_ON);
-    document.getElementById('ppv-toolbar-mode').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-history-btn').classList.toggle('hidden', !DESIGN_ON);
     if (DESIGN_ON) { syncPageSizeControls(); updateUndoRedoButtons(); }
     if (!DESIGN_ON) { selectBox(null); deselectImage(); document.getElementById('ppv-history-menu').classList.add('hidden'); }

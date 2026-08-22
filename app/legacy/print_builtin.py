@@ -39,6 +39,33 @@ DEFAULT_TEMPLATE_FILE = "print_template.default.json"
 
 DATE_FIELDS = {"rsl_date", "old_date", "validity_from", "validity_to", "or_date"}
 
+# freq1-4 often carry a "TX (MHz)"/"RX (MHz)" label baked right into the
+# stored text, and/or the same number typed several times in a row --
+# leftovers from how the original data was imported. _clean_freq_display()
+# below pulls out just the distinct frequency values (in the order they
+# first appear) so the certificate shows each real value once instead of a
+# label plus duplicates. This only changes what's DISPLAYED (Live Preview
+# and PDF) -- the raw stored value is never touched, so the edit form still
+# shows exactly what was typed.
+FREQ_FIELDS = {"freq1", "freq2", "freq3", "freq4"}
+_FREQ_TOKEN_RE = re.compile(r'\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?')
+
+
+def _clean_freq_display(v):
+    if not v:
+        return ""
+    s = str(v)
+    tokens = _FREQ_TOKEN_RE.findall(s)
+    if not tokens:
+        return s.strip()  # no number-like text at all (e.g. "Please see attached.") -- leave as-is
+    seen = set()
+    out = []
+    for t in tokens:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return " / ".join(out)
+
 
 def _project_root():
     # this file lives in app/legacy/ -- the template/db files live two
@@ -175,6 +202,8 @@ def format_value(field, value):
         return ""
     if field in DATE_FIELDS:
         return _format_date(value)
+    if field in FREQ_FIELDS:
+        return _clean_freq_display(value)
     return str(value)
 
 
