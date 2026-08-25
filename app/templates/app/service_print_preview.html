@@ -12,83 +12,139 @@
 <div class="min-h-screen bg-gray-200">
 
   <!-- toolbar -->
-  <div id="ppv-toolbar" class="no-print sticky top-0 z-20 bg-white border-b border-gray-300 px-4 py-2.5 flex flex-wrap items-center gap-2">
-    <a href="/app/services/{{ service_id }}/records/{{ record_id }}" class="text-sm text-brand-600 hover:underline mr-2">&larr; Back to record</a>
-    <span class="text-sm text-gray-500 hidden sm:inline mr-auto">{{ service_name or '' }} &middot; Record #{{ record_id }}</span>
+  <div id="ppv-toolbar" class="no-print sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-4 py-2 flex flex-wrap items-center gap-x-1 gap-y-2">
+    <a href="/app/services/{{ service_id }}/records/{{ record_id }}" class="text-sm text-brand-600 hover:underline font-medium flex items-center gap-1 mr-1">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+      Back to record
+    </a>
+    <span class="text-sm text-gray-400 hidden md:inline mr-auto pl-1 border-l border-gray-200 truncate max-w-xs">{{ service_name or '' }} &middot; Record #{{ record_id }}</span>
 
-    <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Design Mode: Off</button>
-
-    <select id="ppv-box-picker" class="hidden text-xs border border-gray-300 rounded-md px-1.5 py-1.5 max-w-[170px]">
-      <option value="">Jump to box&hellip;</option>
-    </select>
-
-    <div id="ppv-page-size" class="hidden flex items-center gap-1 text-xs border-l border-gray-200 pl-2">
-      <span class="text-gray-500">Paper:</span>
-      <select id="ppv-page-preset" class="border border-gray-300 rounded px-1 py-1.5 text-xs">
-        <option value="612x792">Short / Letter (8.5&times;11)</option>
-        <option value="612x936">Long / Folio (8.5&times;13)</option>
-        <option value="612x1008">Legal (8.5&times;14)</option>
-        <option value="595x842">A4 (8.27&times;11.69)</option>
-        <option value="custom">Custom&hellip;</option>
+    <div class="flex items-center gap-1.5">
+      <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Design Mode: Off</button>
+      <select id="ppv-box-picker" class="hidden text-xs border border-gray-300 rounded-md px-1.5 py-1.5 max-w-[170px] bg-white hover:border-gray-400 transition-colors">
+        <option value="">Jump to box&hellip;</option>
       </select>
-      <input id="ppv-page-w" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded px-1 py-1.5 text-xs" placeholder="W in">
-      <span id="ppv-page-x" class="hidden text-gray-400">&times;</span>
-      <input id="ppv-page-h" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded px-1 py-1.5 text-xs" placeholder="H in">
-      <button id="ppv-page-apply" class="border border-gray-300 rounded px-2 py-1.5 text-xs hover:bg-gray-50">Apply</button>
-    </div>
-
-    <button id="ppv-undo" class="hidden text-xs font-medium border border-gray-300 rounded-md px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-40" title="Undo (Ctrl+Z)">&#8630; Undo</button>
-    <button id="ppv-redo" class="hidden text-xs font-medium border border-gray-300 rounded-md px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-40" title="Redo (Ctrl+Y)">&#8631; Redo</button>
-
-    <button id="ppv-toolbar-mode" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50" title="Choose whether the floating box toolbar follows each box you select, or stays put where you leave it">Toolbar: Follow box</button>
-
-    <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">+ Insert Text Box</button>
-    <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Insert Page Number</button>
-    <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-300 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50">Delete Box</button>
-
-    <div class="relative">
-      <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Layout History &#9662;</button>
-      <div id="ppv-history-menu" class="hidden absolute right-0 mt-1 w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-100 py-1 z-40 text-sm max-h-[28rem] overflow-y-auto">
-        <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
-        <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
-        <div class="h-px bg-gray-100 my-1"></div>
-        <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
-        <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+      <div id="ppv-page-size" class="hidden flex items-center gap-1 text-xs">
+        <span class="text-gray-400">Paper</span>
+        <select id="ppv-page-preset" class="border border-gray-300 rounded-md px-1.5 py-1.5 text-xs bg-white hover:border-gray-400 transition-colors">
+          <option value="612x792">Short / Letter (8.5&times;11)</option>
+          <option value="612x936">Long / Folio (8.5&times;13)</option>
+          <option value="612x1008">Legal (8.5&times;14)</option>
+          <option value="595x842">A4 (8.27&times;11.69)</option>
+          <option value="custom">Custom&hellip;</option>
+        </select>
+        <input id="ppv-page-w" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded-md px-1.5 py-1.5 text-xs" placeholder="W in">
+        <span id="ppv-page-x" class="hidden text-gray-400">&times;</span>
+        <input id="ppv-page-h" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded-md px-1.5 py-1.5 text-xs" placeholder="H in">
+        <button id="ppv-page-apply" class="border border-gray-300 rounded-md px-2.5 py-1.5 text-xs hover:bg-gray-50 transition-colors">Apply</button>
       </div>
     </div>
 
-    <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-300 text-amber-700 rounded-md px-3 py-1.5 hover:bg-amber-50">Reset to Default</button>
-    <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5">Save Layout</button>
+    <span id="ppv-tb-div-1" class="hidden w-px h-5 bg-gray-200 mx-0.5"></span>
 
-    <button id="ppv-print" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Print</button>
-    <button id="ppv-pdf" class="text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5">Export PDF</button>
+    <div class="flex items-center gap-1.5">
+      <button id="ppv-undo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Undo (Ctrl+Z)">&#8630;</button>
+      <button id="ppv-redo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Redo (Ctrl+Y)">&#8631;</button>
+    </div>
+
+    <span class="hidden w-px h-5 bg-gray-200 mx-0.5" id="ppv-tb-div-2"></span>
+
+    <div class="flex items-center gap-1.5">
+      <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">+ Text Box</button>
+      <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Page Number</button>
+      <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-200 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50 transition-colors">Delete Box</button>
+    </div>
+
+    <span class="hidden w-px h-5 bg-gray-200 mx-0.5" id="ppv-tb-div-3"></span>
+
+    <div class="flex items-center gap-1.5">
+      <div class="relative">
+        <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Layout History &#9662;</button>
+        <div id="ppv-history-menu" class="hidden absolute right-0 mt-1 w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-100 py-1 z-40 text-sm max-h-[28rem] overflow-y-auto">
+          <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
+          <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
+          <div class="h-px bg-gray-100 my-1"></div>
+          <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
+          <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+        </div>
+      </div>
+      <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-200 text-amber-700 rounded-md px-3 py-1.5 hover:bg-amber-50 transition-colors">Reset to Default</button>
+      <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Save Layout</button>
+    </div>
+
+    <span id="ppv-tb-div-4" class="hidden w-px h-5 bg-gray-200 mx-0.5"></span>
+
+    <div class="flex items-center gap-1.5">
+      <button id="ppv-print" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Print</button>
+      <button id="ppv-pdf" class="text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Export PDF</button>
+    </div>
   </div>
 
-  <!-- floating box-editor mini toolbar (design mode only) -->
-  <div id="ppv-box-toolbar" class="no-print hidden fixed z-30 bg-gray-800 text-white rounded-md shadow-lg px-2 py-1.5 flex items-center gap-2 text-xs">
-    <span id="ppv-toolbar-handle" class="text-gray-400 hover:text-white px-0.5 -ml-1 select-none" style="cursor:move;" title="Drag to move this bar out of the way">&#10021;</span>
-    <select id="ppv-font-family" class="bg-gray-700 text-white rounded px-1.5 py-1 text-xs border-none">
-      <option value="Helvetica">Sans-serif</option>
-      <option value="Times-Roman">Serif</option>
-      <option value="Courier">Monospace</option>
-    </select>
-    <span class="text-gray-300">Size</span>
-    <button id="ppv-font-minus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">&minus;</button>
-    <span id="ppv-font-size" class="w-6 text-center">10</span>
-    <button id="ppv-font-plus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">+</button>
-    <label class="flex items-center gap-1 ml-1">
-      <input type="checkbox" id="ppv-font-bold"> Bold
-    </label>
-    <span class="text-gray-300 ml-1">Spacing</span>
-    <button id="ppv-lh-minus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">&minus;</button>
-    <span id="ppv-lh-label" class="w-7 text-center">1.2</span>
-    <button id="ppv-lh-plus" class="w-5 h-5 rounded bg-white/10 hover:bg-white/20">+</button>
-    <label class="flex items-center gap-1 ml-1" title="Text color">
-      <input type="color" id="ppv-font-color" value="#000000" class="w-6 h-5 rounded border-none bg-transparent p-0">
-    </label>
-    <button id="ppv-font-hide" class="text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Turns the text white so it's invisible on this printout">Hide (white)</button>
-    <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded px-1.5 py-1 hover:bg-white/10" title="Back to black text">Unhide</button>
-    <span class="text-gray-400 ml-1" title="e.g. type Owner: {owner_name} to mix plain text with a live field">(double-click text to edit -- type {fieldname} for a merge field)</span>
+  <!-- box-editor mini toolbar (design mode + a box selected) -->
+  <div id="ppv-box-toolbar" class="no-print hidden fixed left-0 right-0 z-30 bg-gray-800 text-white shadow-md px-4 py-2 flex items-center gap-x-2 gap-y-1.5 text-xs flex-wrap">
+    <div class="flex items-center gap-1.5">
+      <select id="ppv-font-family" class="bg-gray-700 text-white rounded-md px-2 py-1.5 text-xs border-none hover:bg-gray-600 transition-colors">
+        <option value="Helvetica">Sans-serif</option>
+        <option value="Times-Roman">Serif</option>
+        <option value="Courier">Monospace</option>
+      </select>
+      <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5" title="Font size">
+        <button id="ppv-font-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
+        <span id="ppv-font-size" class="w-6 text-center">10</span>
+        <button id="ppv-font-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+      </div>
+      <label class="flex items-center gap-1.5 bg-gray-700 rounded-md px-2.5 py-1.5 cursor-pointer hover:bg-gray-600 transition-colors">
+        <input type="checkbox" id="ppv-font-bold" class="accent-brand-500"> Bold
+      </label>
+    </div>
+
+    <span class="w-px h-5 bg-white/15"></span>
+
+    <div class="flex items-center gap-1.5">
+      <span class="text-gray-400">Spacing</span>
+      <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5">
+        <button id="ppv-lh-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
+        <span id="ppv-lh-label" class="w-7 text-center">1.2</span>
+        <button id="ppv-lh-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+      </div>
+    </div>
+
+    <span class="w-px h-5 bg-white/15"></span>
+
+    <div class="flex items-center gap-1.5">
+      <label class="flex items-center bg-gray-700 rounded-md p-1 cursor-pointer hover:bg-gray-600 transition-colors" title="Text color">
+        <input type="color" id="ppv-font-color" value="#000000" class="w-6 h-5 rounded border-none bg-transparent p-0 cursor-pointer">
+      </label>
+      <button id="ppv-font-hide" class="text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Turns the text white so it's invisible on this printout">Hide</button>
+      <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Back to black text">Unhide</button>
+    </div>
+
+    <span class="w-px h-5 bg-white/15"></span>
+
+    <button id="ppv-edit-fieldval" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 transition-colors" title="Fix the actual stored value for this record's field -- e.g. clean up messy text">Edit Value&hellip;</button>
+
+    <span class="text-gray-400 ml-auto hidden lg:inline" title="e.g. type Owner: {owner_name} to mix plain text with a live field">Double-click text to edit &middot; type {fieldname} for a merge field</span>
+  </div>
+
+  <!-- ============================== Edit field value modal ============================== -->
+  <div id="ppv-fieldval-modal" class="no-print hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-md shadow-lg w-full max-w-lg">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-medium text-gray-700 text-sm">Edit <span id="ppv-fieldval-name" class="font-semibold"></span> for this record</h3>
+        <button id="ppv-fieldval-close" class="text-gray-400 hover:text-gray-600">&times;</button>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-500 mb-2">
+          This changes the actual data stored for this one record (not just how it prints) -- handy for cleaning up
+          messy leftover text. Nothing else on this certificate is affected.
+        </p>
+        <textarea id="ppv-fieldval-textarea" rows="5" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
+      </div>
+      <div class="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+        <button id="ppv-fieldval-cancel" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50">Cancel</button>
+        <button id="ppv-fieldval-save" class="text-xs font-medium bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700">Save</button>
+      </div>
+    </div>
   </div>
 
   <p id="ppv-status" class="no-print text-center text-sm text-gray-500 py-2"></p>
@@ -164,6 +220,7 @@
   const API_BASE = '/api/services/' + SERVICE_ID;
   let TEMPLATE = null;
   let FIELDS = {};
+  let RAW_RECORD_DATA = {};
   let DESIGN_ON = false;
   let SELECTED_BOX = null;
 
@@ -287,14 +344,16 @@
   async function loadEverything() {
     statusEl.textContent = 'Loading…';
     try {
-      const [tplRes, dataRes] = await Promise.all([
+      const [tplRes, dataRes, recRes] = await Promise.all([
         window.ntcFetchJSON(API_BASE + '/print-template'),
         window.ntcFetchJSON(API_BASE + '/print-data/' + RECORD_ID),
+        window.ntcFetchJSON(API_BASE + '/records/' + RECORD_ID),
       ]);
       if (!tplRes.ok) { statusEl.textContent = 'Could not load the certificate layout.'; return; }
       if (!dataRes.ok) { statusEl.textContent = (dataRes.body && dataRes.body.detail) || 'Could not load this record.'; return; }
       TEMPLATE = tplRes.body;
       FIELDS = dataRes.body.fields || {};
+      RAW_RECORD_DATA = (recRes.ok && recRes.body.data) || {};
       statusEl.textContent = '';
       renderAll();
     } catch (e) {
@@ -324,68 +383,15 @@
     el.appendChild(handle);
   }
 
-  function positionBoxToolbar(el) {
-    if (typeof TOOLBAR_MODE !== 'undefined' && TOOLBAR_MODE === 'docked') {
-      const saved = localStorage.getItem('ntc_ppv_toolbar_docked_pos');
-      if (saved) {
-        try {
-          const pos = JSON.parse(saved);
-          boxToolbar.style.left = pos.left + 'px';
-          boxToolbar.style.top = pos.top + 'px';
-          return;
-        } catch (e) { /* fall through to default position below */ }
-      }
-      boxToolbar.style.left = '16px';
-      boxToolbar.style.top = '60px';
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    boxToolbar.style.left = (r.left + window.scrollX) + 'px';
-    boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
+  // ---- the box toolbar is pinned to the top of the page, directly under
+  // the main toolbar -- it no longer follows the selected box around the
+  // page or drags, so it always stays put exactly where you expect it.
+  const mainToolbarEl = document.getElementById('ppv-toolbar');
+  function positionBoxToolbar() {
+    boxToolbar.style.left = '0px';
+    boxToolbar.style.top = mainToolbarEl.getBoundingClientRect().bottom + 'px';
   }
-
-  // ---- the floating box toolbar can be dragged out of the way (e.g. when
-  // it sits right on top of the certificate text it's editing) using the
-  // small handle at its left edge. It snaps back to sitting above whatever
-  // box you select next -- this only moves it out of the way for the box
-  // you're currently working on.
-  let tbDrag = null;
-  document.getElementById('ppv-toolbar-handle').addEventListener('mousedown', function (evt) {
-    const r = boxToolbar.getBoundingClientRect();
-    tbDrag = {
-      startX: evt.clientX, startY: evt.clientY,
-      startLeft: r.left + window.scrollX, startTop: r.top + window.scrollY,
-    };
-    evt.preventDefault();
-  });
-  document.addEventListener('mousemove', function (evt) {
-    if (!tbDrag) return;
-    boxToolbar.style.left = (tbDrag.startLeft + evt.clientX - tbDrag.startX) + 'px';
-    boxToolbar.style.top = (tbDrag.startTop + evt.clientY - tbDrag.startY) + 'px';
-    if (TOOLBAR_MODE === 'docked') saveDockedPos();
-  });
-  document.addEventListener('mouseup', function () { tbDrag = null; });
-
-  // ---- toolbar mode: "Follow box" (default) repositions the toolbar above
-  // whatever box you select; "Docked" keeps it wherever you last dragged it
-  // (saved in this browser) no matter which box you select next -- pick
-  // whichever fits how you like to work.
-  let TOOLBAR_MODE = localStorage.getItem('ntc_ppv_toolbar_mode') || 'follow';
-  const toolbarModeBtn = document.getElementById('ppv-toolbar-mode');
-  function saveDockedPos() {
-    const r = boxToolbar.getBoundingClientRect();
-    localStorage.setItem('ntc_ppv_toolbar_docked_pos', JSON.stringify({ left: r.left + window.scrollX, top: r.top + window.scrollY }));
-  }
-  function applyToolbarModeLabel() {
-    toolbarModeBtn.textContent = 'Toolbar: ' + (TOOLBAR_MODE === 'docked' ? 'Docked' : 'Follow box');
-  }
-  applyToolbarModeLabel();
-  toolbarModeBtn.addEventListener('click', function () {
-    TOOLBAR_MODE = TOOLBAR_MODE === 'docked' ? 'follow' : 'docked';
-    localStorage.setItem('ntc_ppv_toolbar_mode', TOOLBAR_MODE);
-    applyToolbarModeLabel();
-    if (TOOLBAR_MODE === 'docked' && SELECTED_BOX) saveDockedPos();
-  });
+  window.addEventListener('resize', function () { if (!boxToolbar.classList.contains('hidden')) positionBoxToolbar(); });
 
   // ---------------------------------------------------------------- Undo / Redo
   // A plain snapshot-based undo stack -- simple and reliable for a document
@@ -442,6 +448,35 @@
     else if (k === 'y' || (k === 'z' && evt.shiftKey)) { evt.preventDefault(); doRedo(); }
   });
 
+  // ---------------------------------------------------------------- copy/paste boxes
+  let CLIPBOARD_BOX = null;
+  document.addEventListener('keydown', function (evt) {
+    if (!DESIGN_ON) return;
+    if (document.activeElement && document.activeElement.contentEditable === 'true') return;
+    if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    const ctrl = evt.ctrlKey || evt.metaKey;
+    if (!ctrl) return;
+    const k = evt.key.toLowerCase();
+    if (k === 'c') {
+      if (!SELECTED_BOX) return;
+      evt.preventDefault();
+      CLIPBOARD_BOX = JSON.parse(JSON.stringify(findBox(SELECTED_BOX.dataset.id)));
+      window.ntcToast('Box copied -- press Ctrl+V to paste it.');
+    } else if (k === 'v') {
+      if (!CLIPBOARD_BOX) return;
+      evt.preventDefault();
+      pushUndo();
+      const box = JSON.parse(JSON.stringify(CLIPBOARD_BOX));
+      box.id = 'copy' + Date.now() + '_' + (nextCustomId++);
+      box.x = (box.x || 0) + 14;
+      box.y = (box.y || 0) + 14;
+      TEMPLATE.boxes.push(box);
+      renderAll();
+      const el = pageEl.querySelector('.ppv-box[data-id="' + box.id + '"]');
+      if (el) selectBox(el);
+    }
+  });
+
   function selectBox(el) {
     if (SELECTED_BOX) SELECTED_BOX.classList.remove('selected');
     SELECTED_BOX = el;
@@ -460,9 +495,62 @@
     fontColorInput.value = color;
     hideBtn.classList.toggle('hidden', color.toLowerCase() === '#ffffff');
     unhideBtn.classList.toggle('hidden', color.toLowerCase() !== '#ffffff');
-    positionBoxToolbar(el);
+
+    // "Edit Value..." -- only offered when this box shows exactly one
+    // database field and nothing else, so there's no ambiguity about which
+    // value would be edited.
+    const fieldRuns = [];
+    box.paragraphs.forEach(function (p) { p.runs.forEach(function (r) { if (r.type === 'field') fieldRuns.push(r.field); }); });
+    const editValBtn = document.getElementById('ppv-edit-fieldval');
+    if (fieldRuns.length === 1) {
+      editValBtn.classList.remove('hidden');
+      editValBtn.dataset.field = fieldRuns[0];
+    } else {
+      editValBtn.classList.add('hidden');
+      delete editValBtn.dataset.field;
+    }
+
+    positionBoxToolbar();
     boxToolbar.classList.remove('hidden');
   }
+
+  // ---- "Edit Value..." -- fixes the actual stored data for this one
+  // record's field (e.g. a messy value), separate from anything about the
+  // box's position/font/etc. Prefilled with the same cleaned-up text the
+  // box is currently showing, since that's the easiest starting point for
+  // trimming out a leftover duplicate/label.
+  const fieldValModal = document.getElementById('ppv-fieldval-modal');
+  const fieldValTextarea = document.getElementById('ppv-fieldval-textarea');
+  const fieldValName = document.getElementById('ppv-fieldval-name');
+  document.getElementById('ppv-edit-fieldval').addEventListener('click', function (evt) {
+    const field = evt.currentTarget.dataset.field;
+    if (!field) return;
+    fieldValName.textContent = field;
+    fieldValTextarea.value = FIELDS[field] || '';
+    fieldValModal.dataset.field = field;
+    fieldValModal.classList.remove('hidden');
+    fieldValTextarea.focus();
+  });
+  function closeFieldValModal() { fieldValModal.classList.add('hidden'); }
+  document.getElementById('ppv-fieldval-close').addEventListener('click', closeFieldValModal);
+  document.getElementById('ppv-fieldval-cancel').addEventListener('click', closeFieldValModal);
+  document.getElementById('ppv-fieldval-save').addEventListener('click', function (evt) {
+    const field = fieldValModal.dataset.field;
+    if (!field) return;
+    window.ntcBusy(evt.currentTarget, async function () {
+      const newValue = fieldValTextarea.value;
+      const r = await window.ntcFetchJSON(API_BASE + '/records/' + RECORD_ID, {
+        method: 'PUT', body: JSON.stringify({ data: Object.assign({}, RAW_RECORD_DATA, { [field]: newValue }) }),
+      });
+      if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Could not save that change.', true); return; }
+      RAW_RECORD_DATA[field] = newValue;
+      const dataRes = await window.ntcFetchJSON(API_BASE + '/print-data/' + RECORD_ID);
+      if (dataRes.ok) FIELDS = dataRes.body.fields || FIELDS;
+      renderAll();
+      closeFieldValModal();
+      window.ntcToast('Saved.');
+    });
+  });
 
   function adjustFont(delta) {
     if (!SELECTED_BOX) return;
@@ -683,11 +771,6 @@
       drag.boxEl.style.width = drag.box.w + 'pt';
       drag.boxEl.style.height = drag.box.h + 'pt';
     }
-    if (SELECTED_BOX === drag.boxEl && TOOLBAR_MODE !== 'docked') {
-      const r = drag.boxEl.getBoundingClientRect();
-      boxToolbar.style.left = (r.left + window.scrollX) + 'px';
-      boxToolbar.style.top = (r.top + window.scrollY - 34) + 'px';
-    }
   });
   document.addEventListener('mouseup', function () { drag = null; });
 
@@ -751,8 +834,10 @@
     document.getElementById('ppv-page-size').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-undo').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-redo').classList.toggle('hidden', !DESIGN_ON);
-    document.getElementById('ppv-toolbar-mode').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-history-btn').classList.toggle('hidden', !DESIGN_ON);
+    ['ppv-tb-div-1', 'ppv-tb-div-2', 'ppv-tb-div-3', 'ppv-tb-div-4'].forEach(function (id) {
+      document.getElementById(id).classList.toggle('hidden', !DESIGN_ON);
+    });
     if (DESIGN_ON) { syncPageSizeControls(); updateUndoRedoButtons(); }
     if (!DESIGN_ON) { selectBox(null); deselectImage(); document.getElementById('ppv-history-menu').classList.add('hidden'); }
   });
