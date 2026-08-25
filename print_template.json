@@ -57,42 +57,6 @@
        "font": "Helvetica"
       }
      ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1845-1855",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1845-1855",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1845-1855",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
     }
    ]
   },
@@ -934,7 +898,7 @@
    "x": 423.4,
    "y": 346.1,
    "w": 141.7,
-   "h": 102.3,
+   "h": 42.965999999999994,
    "paragraphs": [
     {
      "align": "left",
@@ -973,7 +937,21 @@
        "bold": false,
        "size": 8.0,
        "font": "Helvetica"
-      },
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "box34_tech",
+   "x": 423.4,
+   "y": 389.06600000000003,
+   "w": 141.7,
+   "h": 29.666999999999998,
+   "paragraphs": [
+    {
+     "align": "left",
+     "runs": [
       {
        "type": "text",
        "text": "Tech: ",
@@ -987,7 +965,21 @@
        "bold": false,
        "size": 8.0,
        "font": "Helvetica"
-      },
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "box34_config",
+   "x": 423.4,
+   "y": 418.733,
+   "w": 141.7,
+   "h": 29.666999999999998,
+   "paragraphs": [
+    {
+     "align": "left",
+     "runs": [
       {
        "type": "text",
        "text": "Config/Channel: ",
@@ -1097,42 +1089,6 @@
       {
        "type": "field",
        "field": "freq3",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1750-1760",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1750-1760",
-       "bold": true,
-       "size": 8.0,
-       "font": "Helvetica"
-      }
-     ]
-    },
-    {
-     "align": "center",
-     "runs": [
-      {
-       "type": "text",
-       "text": " 1750-1760",
        "bold": true,
        "size": 8.0,
        "font": "Helvetica"
