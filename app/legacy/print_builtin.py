@@ -112,13 +112,7 @@ _FONT_DIRS = [
 # versions and between Windows and Linux.
 _FONT_FILES = {
     "Arial":           ("arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf"),
-    # Arial Narrow is the usual choice for squeezing a long licensee name or
-    # address into a fixed box on the form without dropping the font size.
-    "Arial Narrow":    ("arialn.ttf", "arialnb.ttf", "arialni.ttf", "arialnbi.ttf"),
     "Calibri":         ("calibri.ttf", "calibrib.ttf", "calibrii.ttf", "calibriz.ttf"),
-    # Calibri Light ships no bold of its own -- Word substitutes Calibri Bold,
-    # so bold here maps to calibrib.ttf to match what Word does.
-    "Calibri Light":   ("calibril.ttf", "calibrib.ttf", "calibrili.ttf", "calibriz.ttf"),
     "Cambria":         ("cambria.ttc", "cambriab.ttf", "cambriai.ttf", "cambriaz.ttf"),
     "Courier New":     ("cour.ttf", "courbd.ttf", "couri.ttf", "courbi.ttf"),
     "Georgia":         ("georgia.ttf", "georgiab.ttf", "georgiai.ttf", "georgiaz.ttf"),
@@ -153,36 +147,19 @@ _BUILTIN_FONTS = [
 _FONT_CACHE = None
 
 
-_FONT_INDEX = None
-
-
-def _font_index():
-    """filename (lowercased) -> full path, built once.
-
-    C:\Windows\Fonts holds a few thousand files and there are ~15 families
-    x 4 variants to look for; re-walking the folder for each one made the
-    first Design-mode load noticeably slow. One pass, then dictionary
-    lookups.
-    """
-    global _FONT_INDEX
-    if _FONT_INDEX is not None:
-        return _FONT_INDEX
-    idx = {}
+def _find_font_file(filename):
     for d in _FONT_DIRS:
         if not d or not os.path.isdir(d):
             continue
-        try:
-            for root, _dirs, files in os.walk(d):
-                for f in files:
-                    idx.setdefault(f.lower(), os.path.join(root, f))
-        except Exception:
-            continue      # unreadable folder -- just skip it
-    _FONT_INDEX = idx
-    return idx
-
-
-def _find_font_file(filename):
-    return _font_index().get(filename.lower())
+        direct = os.path.join(d, filename)
+        if os.path.exists(direct):
+            return direct
+        # Linux keeps fonts in per-family subfolders
+        for root, _dirs, files in os.walk(d):
+            for f in files:
+                if f.lower() == filename.lower():
+                    return os.path.join(root, f)
+    return None
 
 
 def available_fonts():

@@ -105,10 +105,13 @@
 
     <div class="ppv-box-controls flex items-center gap-x-2 gap-y-1.5 flex-wrap">
       <div class="flex items-center gap-1.5">
-        <select id="ppv-font-family" class="bg-gray-700 text-white rounded-md px-2 py-1.5 text-xs border-none hover:bg-gray-600 transition-colors">
-          <option value="Helvetica">Sans-serif</option>
-          <option value="Times-Roman">Serif</option>
-          <option value="Courier">Monospace</option>
+        <!-- Filled in from /api/print-fonts on load: the fonts installed on
+             THIS PC that the PDF can really use. Starts with the three
+             built-ins so it is never empty. -->
+        <select id="ppv-font-family" class="bg-gray-700 text-white rounded-md px-2 py-1.5 text-xs border-none hover:bg-gray-600 transition-colors max-w-[150px]" title="Only fonts this computer can actually print are listed">
+          <option value="Helvetica">Helvetica (built-in)</option>
+          <option value="Times-Roman">Times Roman (built-in)</option>
+          <option value="Courier">Courier (built-in)</option>
         </select>
         <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5" title="Font size">
           <button id="ppv-font-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
@@ -355,10 +358,32 @@
   // Matches the 3 fonts app/legacy/print_builtin.py can actually put in the
   // PDF (reportlab's built-in base fonts, no font files to install) -- so
   // what you see here is what prints.
+  // name -> CSS stack, so the preview on screen matches the PDF. Seeded with
+  // the three built-ins and extended by loadFonts() with whatever this PC has.
+  let FONT_CSS = {
+    'Helvetica': "Arial, Helvetica, sans-serif",
+    'Times-Roman': "'Times New Roman', Times, serif",
+    'Courier': "'Courier New', Courier, monospace",
+  };
   function cssFontFamily(font) {
-    if (font === 'Times-Roman') return "'Times New Roman', Times, serif";
-    if (font === 'Courier') return "'Courier New', Courier, monospace";
-    return "Arial, Helvetica, sans-serif";
+    return FONT_CSS[font] || "Arial, Helvetica, sans-serif";
+  }
+
+  // Ask the server which fonts it can actually put in the PDF, and offer only
+  // those. Listing a font reportlab hasn't registered would look right in this
+  // preview and then silently print as Helvetica.
+  function loadFonts() {
+    return window.ntcFetchJSON('/api/print-fonts').then(function (r) {
+      if (!r.ok || !r.body || !r.body.fonts || !r.body.fonts.length) return;
+      const sel = document.getElementById('ppv-font-family');
+      const current = sel.value;
+      sel.innerHTML = r.body.fonts.map(function (f) {
+        FONT_CSS[f.name] = f.css;
+        return '<option value="' + window.ntcEsc(f.name) + '">' + window.ntcEsc(f.label || f.name) + '</option>';
+      }).join('');
+      if (current) sel.value = current;
+      if (TEMPLATE) renderAll();   // redraw with the real faces now known
+    }).catch(function () { /* keep the three built-ins */ });
   }
 
   function renderBoxText(box) {
@@ -1418,7 +1443,7 @@
     }).catch(function () { window.ntcToast('Could not reach the server.', true); });
   }
 
-  loadEverything();
+  loadEverything().then(loadFonts);
 })();
 </script>
 {% endblock %}

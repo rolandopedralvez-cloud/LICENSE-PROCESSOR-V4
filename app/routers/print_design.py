@@ -21,6 +21,19 @@ def get_print_template(request: Request):
     return print_builtin.load_template()
 
 
+@router.get("/api/print-fonts")
+def list_print_fonts(request: Request):
+    """The fonts Design mode is allowed to offer.
+
+    Deliberately generated from what reportlab has actually registered on THIS
+    machine (see print_builtin.available_fonts) rather than a fixed list --
+    offering a font the PDF can't render would show one face on screen and
+    print a different one, with nothing to warn you.
+    """
+    require_permission(request, "can_print")
+    return {"fonts": print_builtin.available_fonts()}
+
+
 @router.get("/api/print-template/default")
 def get_default_print_template(request: Request):
     """The untouched factory layout -- 'Reset to Default' in Design mode."""
