@@ -9,11 +9,17 @@
      Print Preview (still on the license form's Print▾ menu) -- nothing
      here changes that flow. -->
 
-<div id="ppv-shell" class="min-h-screen bg-gray-200">
+<!-- The toolbars are plain rows at the top of a full-height column, and the
+     certificate scrolls in its own area underneath (#ppv-scroll). Done this
+     way rather than with position:fixed because a fixed bar silently stops
+     being fixed if any ancestor ever gets a CSS transform/filter -- here the
+     bars are simply outside the scrolling area, so they physically cannot
+     scroll out of view no matter what. -->
+<div id="ppv-shell" class="h-screen flex flex-col overflow-hidden bg-gray-200">
 
   <!-- toolbar (Word-ribbon style: light gray band, grouped controls with
        small captions under each group, thin dividers between groups) -->
-  <div id="ppv-toolbar" class="no-print fixed top-0 left-0 right-0 z-20 ppv-ribbon border-b border-gray-300 shadow-sm px-3 pt-2 pb-1 flex flex-wrap items-end gap-x-0 gap-y-2">
+  <div id="ppv-toolbar" class="no-print shrink-0 z-20 ppv-ribbon border-b border-gray-300 shadow-sm px-3 pt-2 pb-1 flex flex-wrap items-end gap-x-0 gap-y-2">
     <div class="ppv-group !border-r-0 !px-2">
       <a href="/app/licenses/{{ lic_id }}" class="text-sm text-brand-700 hover:underline font-medium flex items-center gap-1">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
@@ -99,7 +105,7 @@
        that pops in/out as boxes get selected/deselected -- so it never
        jumps around while scrolling. Its controls are simply greyed out
        (via the .ppv-empty class) until a box is actually selected. -->
-  <div id="ppv-box-toolbar" class="no-print hidden fixed left-0 right-0 z-30 bg-gray-800 text-white shadow-md px-4 py-2 flex items-center gap-x-2 gap-y-1.5 text-xs flex-wrap">
+  <div id="ppv-box-toolbar" class="no-print hidden shrink-0 z-30 bg-gray-800 text-white shadow-md px-4 py-2 flex items-center gap-x-2 gap-y-1.5 text-xs flex-wrap">
     <span id="ppv-box-toolbar-hint" class="hidden text-gray-400 italic">Click a box on the certificate to edit its font, spacing, or color&hellip;</span>
 
     <div class="ppv-box-controls flex items-center gap-x-2 gap-y-1.5 flex-wrap">
@@ -169,6 +175,8 @@
     </div>
   </div>
 
+  <!-- Everything below scrolls; everything above stays put. -->
+  <div id="ppv-scroll" class="flex-1 overflow-auto">
   <p id="ppv-status" class="no-print text-center text-sm text-gray-500 py-2"></p>
 
   <!-- the certificate itself -- 612x792pt = US Letter, matches app/legacy/print_builtin.py's PDF page size exactly -->
@@ -184,6 +192,7 @@
     </div>
     <!-- boxes injected here by JS -->
   </div>
+  </div><!-- /#ppv-scroll -->
 </div>
 
 <style>
@@ -196,6 +205,11 @@
        Design Mode, but never let it print even if someone hits Ctrl+P
        while Design Mode happens to be on. */
     #ppv-grid { display: none !important; }
+    /* The on-screen layout is a fixed-height column with its own scrolling
+       area. On paper there is no scrolling, so unwind both -- otherwise the
+       certificate would be clipped to one screen's worth of height. */
+    #ppv-shell { height: auto !important; display: block !important; overflow: visible !important; }
+    #ppv-scroll { flex: none !important; overflow: visible !important; }
   }
   /* @page size is set dynamically in JS (applyPageSize()) from the
      template's paper size, so a custom bond paper size actually takes
@@ -251,13 +265,18 @@
     letter-spacing: 0.02em; white-space: nowrap;
   }
 
-  /* ---- Fixed toolbar stack ------------------------------------------
-     Both bars are position:fixed so they stay on screen no matter how far
-     down the certificate you scroll -- #ppv-shell below gets padding-top
-     added by JS (updateLayoutOffsets()) equal to however tall the bars
-     currently are, so the certificate itself never starts out hidden
-     underneath them. */
-  #ppv-toolbar, #ppv-box-toolbar { left: 0; right: 0; }
+  /* ---- Toolbar stack -------------------------------------------------
+     #ppv-shell is a full-height column: toolbars first, then #ppv-scroll
+     which takes the remaining height and does all the scrolling. The bars
+     sit outside that scrolling area, so scrolling the certificate can
+     never move them.
+
+     overflow-x:auto on each bar is the safety net for a narrow window or a
+     zoomed-in display: if the buttons need more width than the screen has,
+     the BAR scrolls sideways on its own and every button stays reachable,
+     instead of "Back" and "Export PDF" being chopped off at the edges. */
+  #ppv-toolbar, #ppv-box-toolbar { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+  #ppv-scroll { scroll-behavior: smooth; }
 
   /* ---- "Permanent" mini toolbar (the black box) ---------------------
      Design Mode keeps this bar on screen the whole time, whether or not a
@@ -440,18 +459,15 @@
   // matter how far the certificate below is scrolled.
   const mainToolbarEl = document.getElementById('ppv-toolbar');
   const shellEl = document.getElementById('ppv-shell');
-  function positionBoxToolbar() {
-    boxToolbar.style.left = '0px';
-    boxToolbar.style.top = mainToolbarEl.getBoundingClientRect().bottom + 'px';
-  }
+  // Both bars are ordinary rows in the #ppv-shell column now, so there is
+  // nothing to position by hand -- the browser stacks them and #ppv-scroll
+  // takes whatever height is left. Kept as a no-op so the existing calls
+  // (and anything added later) stay valid.
+  function positionBoxToolbar() { /* no longer needed -- see #ppv-shell layout */ }
   // Keeps the certificate from starting out underneath the fixed toolbar
   // stack -- recomputed whenever the stack's height can change (window
   // resize/reflow, or the box toolbar showing/hiding with Design Mode).
-  function updateLayoutOffsets() {
-    positionBoxToolbar();
-    const boxToolbarH = boxToolbar.classList.contains('hidden') ? 0 : boxToolbar.getBoundingClientRect().height;
-    shellEl.style.paddingTop = (mainToolbarEl.getBoundingClientRect().height + boxToolbarH + 12) + 'px';
-  }
+  function updateLayoutOffsets() { /* no longer needed -- the column layout handles it */ }
   window.addEventListener('resize', updateLayoutOffsets);
 
   // ---------------------------------------------------------------- Undo / Redo
