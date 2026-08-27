@@ -86,6 +86,160 @@ def _clean_freq_display(v):
     return " / ".join(out)
 
 
+# ---------------------------------------------------------------- Fonts
+# The PDF is drawn by reportlab, which only knows three fonts out of the box
+# (Helvetica / Times-Roman / Courier). Anything else has to be registered from
+# a real font file first -- and if it isn't, reportlab silently falls back to
+# Helvetica, so the Live Preview would show one font and the printed licence
+# would come out in another.
+#
+# So instead of hard-coding a longer list and hoping, this looks for the fonts
+# already installed on this PC (C:\Windows\Fonts on the office machines) and
+# offers ONLY the ones it actually found and registered. The Design-mode
+# dropdown is built from this list, which means every font you can pick is a
+# font that will really print.
+#
+# Nothing is bundled with the app -- these are the machine's own fonts, so
+# there is no font licensing question and nothing extra to install.
+_FONT_DIRS = [
+    r"C:\Windows\Fonts",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
+    "/usr/share/fonts", "/usr/local/share/fonts", os.path.expanduser("~/.fonts"),
+]
+
+# display name -> (regular, bold, italic, bold-italic) file names to look for.
+# Several spellings per family because the files differ between Windows
+# versions and between Windows and Linux.
+_FONT_FILES = {
+    "Arial":           ("arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf"),
+    # Arial Narrow is the usual choice for squeezing a long licensee name or
+    # address into a fixed box on the form without dropping the font size.
+    "Arial Narrow":    ("arialn.ttf", "arialnb.ttf", "arialni.ttf", "arialnbi.ttf"),
+    "Calibri":         ("calibri.ttf", "calibrib.ttf", "calibrii.ttf", "calibriz.ttf"),
+    # Calibri Light ships no bold of its own -- Word substitutes Calibri Bold,
+    # so bold here maps to calibrib.ttf to match what Word does.
+    "Calibri Light":   ("calibril.ttf", "calibrib.ttf", "calibrili.ttf", "calibriz.ttf"),
+    "Cambria":         ("cambria.ttc", "cambriab.ttf", "cambriai.ttf", "cambriaz.ttf"),
+    "Courier New":     ("cour.ttf", "courbd.ttf", "couri.ttf", "courbi.ttf"),
+    "Georgia":         ("georgia.ttf", "georgiab.ttf", "georgiai.ttf", "georgiaz.ttf"),
+    "Segoe UI":        ("segoeui.ttf", "segoeuib.ttf", "segoeuii.ttf", "segoeuiz.ttf"),
+    "Tahoma":          ("tahoma.ttf", "tahomabd.ttf", "tahoma.ttf", "tahomabd.ttf"),
+    "Times New Roman": ("times.ttf", "timesbd.ttf", "timesi.ttf", "timesbi.ttf"),
+    "Trebuchet MS":    ("trebuc.ttf", "trebucbd.ttf", "trebucit.ttf", "trebucbi.ttf"),
+    "Verdana":         ("verdana.ttf", "verdanab.ttf", "verdanai.ttf", "verdanaz.ttf"),
+    # Linux equivalents, so this works on a non-Windows machine too
+    "Liberation Sans":  ("LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf",
+                         "LiberationSans-Italic.ttf", "LiberationSans-BoldItalic.ttf"),
+    "Liberation Serif": ("LiberationSerif-Regular.ttf", "LiberationSerif-Bold.ttf",
+                         "LiberationSerif-Italic.ttf", "LiberationSerif-BoldItalic.ttf"),
+    "DejaVu Sans":      ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf",
+                         "DejaVuSans-Oblique.ttf", "DejaVuSans-BoldOblique.ttf"),
+}
+
+# What the browser should use to show the same font on screen.
+_FONT_CSS = {
+    "Helvetica":   "Arial, Helvetica, sans-serif",
+    "Times-Roman": "'Times New Roman', Times, serif",
+    "Courier":     "'Courier New', Courier, monospace",
+}
+
+# The three that need no font file and are always available.
+_BUILTIN_FONTS = [
+    {"name": "Helvetica",   "label": "Helvetica (built-in)"},
+    {"name": "Times-Roman", "label": "Times Roman (built-in)"},
+    {"name": "Courier",     "label": "Courier (built-in)"},
+]
+
+_FONT_CACHE = None
+
+
+_FONT_INDEX = None
+
+
+def _font_index():
+    """filename (lowercased) -> full path, built once.
+
+    C:\Windows\Fonts holds a few thousand files and there are ~15 families
+    x 4 variants to look for; re-walking the folder for each one made the
+    first Design-mode load noticeably slow. One pass, then dictionary
+    lookups.
+    """
+    global _FONT_INDEX
+    if _FONT_INDEX is not None:
+        return _FONT_INDEX
+    idx = {}
+    for d in _FONT_DIRS:
+        if not d or not os.path.isdir(d):
+            continue
+        try:
+            for root, _dirs, files in os.walk(d):
+                for f in files:
+                    idx.setdefault(f.lower(), os.path.join(root, f))
+        except Exception:
+            continue      # unreadable folder -- just skip it
+    _FONT_INDEX = idx
+    return idx
+
+
+def _find_font_file(filename):
+    return _font_index().get(filename.lower())
+
+
+def available_fonts():
+    """Every font this machine can actually put in the PDF.
+
+    Registers each family it finds (with its bold/italic variants so <b> keeps
+    working) and returns [{name, label, css}] for the Design-mode dropdown.
+    Cached -- scanning the font folders is slow and the answer can't change
+    while the app is running.
+    """
+    global _FONT_CACHE
+    if _FONT_CACHE is not None:
+        return _FONT_CACHE
+
+    fonts = [dict(f, css=_FONT_CSS.get(f["name"], "sans-serif")) for f in _BUILTIN_FONTS]
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+    except Exception:
+        _FONT_CACHE = fonts
+        return fonts
+
+    for family, files in _FONT_FILES.items():
+        reg = _find_font_file(files[0])
+        if not reg:
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont(family, reg))
+        except Exception:
+            continue      # a .ttc or an unreadable file -- just skip this family
+        variants = {"normal": family, "bold": family, "italic": family, "boldItalic": family}
+        for key, idx, suffix in (("bold", 1, "-Bold"), ("italic", 2, "-Italic"), ("boldItalic", 3, "-BoldItalic")):
+            path = _find_font_file(files[idx]) if idx < len(files) else None
+            if not path or path == reg:
+                continue
+            try:
+                pdfmetrics.registerFont(TTFont(family + suffix, path))
+                variants[key] = family + suffix
+            except Exception:
+                pass
+        try:
+            pdfmetrics.registerFontFamily(
+                family, normal=variants["normal"], bold=variants["bold"],
+                italic=variants["italic"], boldItalic=variants["boldItalic"])
+        except Exception:
+            pass
+        fonts.append({"name": family, "label": family,
+                      "css": "'" + family + "', sans-serif"})
+
+    _FONT_CACHE = fonts
+    return fonts
+
+
+def font_is_available(name):
+    return any(f["name"] == name for f in available_fonts())
+
+
 def _project_root():
     # this file lives in app/legacy/ -- the template/db files live two
     # levels up, next to start.bat (same convention as every other
@@ -316,8 +470,11 @@ def build_pdf(lic_id, batch_index=1, batch_total=1):
                     continue
                 base_size = run.get("size", base_size)
                 base_font = run.get("font", "Helvetica") or "Helvetica"
-                if base_font not in ("Helvetica", "Times-Roman", "Courier"):
-                    base_font = "Helvetica"  # unknown/legacy font name -- fall back rather than error
+                if not font_is_available(base_font):
+                    # A font saved into the layout on a PC that had it, opened
+                    # on a PC that doesn't. Fall back rather than error -- the
+                    # licence still prints, just in the default face.
+                    base_font = "Helvetica"
                 # A field like Frequency often has several TX/RX lines typed
                 # with line breaks -- reportlab's markup only respects <br/>,
                 # not a literal newline, so convert after escaping.
