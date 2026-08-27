@@ -67,6 +67,8 @@
     <div class="ppv-group">
       <div class="flex items-center gap-1.5">
         <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">+ Text Box</button>
+        <!-- Menu lives outside the toolbar -- see #ppv-field-menu near the bottom. -->
+        <button id="ppv-add-field" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors" title="Put a database field on the certificate -- e.g. Call Sign or Hours of Operation">+ Field &#9662;</button>
         <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Page Number</button>
         <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-200 text-red-600 rounded-md px-3 py-1.5 bg-white hover:bg-red-50 transition-colors">Delete Box</button>
       </div>
@@ -213,6 +215,24 @@
     <div class="h-px bg-gray-100 my-1"></div>
     <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
     <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+  </div>
+
+  <!-- ---- "+ Field" picker ------------------------------------------------
+       Lists every column this record actually has, with its current value, so
+       a field that isn't on the layout yet (Call Sign and Hours of Operation
+       were both missing entirely, which is why they showed nothing) can be
+       dropped straight onto the certificate.
+
+       Like the Layout History menu, this MUST live outside #ppv-toolbar --
+       a menu inside that bar gets clipped and painted under the black bar. -->
+  <div id="ppv-field-menu" class="no-print hidden fixed w-80 bg-white text-gray-800 rounded-md shadow-lg border border-gray-200 z-50 text-sm flex flex-col">
+    <div class="px-3 pt-3 pb-2 border-b border-gray-100">
+      <input id="ppv-field-search" type="search" placeholder="Type to find a field, e.g. call"
+             class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+             autocomplete="off">
+      <p class="text-[10px] text-gray-400 mt-1.5">Click one to place it on the certificate, then drag it where you want it and click Save Layout.</p>
+    </div>
+    <div id="ppv-field-list" class="overflow-y-auto py-1"></div>
   </div>
 </div>
 
@@ -1052,6 +1072,7 @@
     document.getElementById('ppv-reset').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-add-text').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-add-pagenum').classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-add-field').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-box-picker').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-page-size').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-undo').classList.toggle('hidden', !DESIGN_ON);
@@ -1066,7 +1087,9 @@
     boxToolbar.classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-box-toolbar-hint').classList.toggle('hidden', !DESIGN_ON);
     if (DESIGN_ON) { syncPageSizeControls(); updateUndoRedoButtons(); boxToolbar.classList.add('ppv-empty'); }
-    if (!DESIGN_ON) { selectBox(null); deselectImage(); document.getElementById('ppv-history-menu').classList.add('hidden'); }
+    if (!DESIGN_ON) { selectBox(null); deselectImage();
+      document.getElementById('ppv-history-menu').classList.add('hidden');
+      document.getElementById('ppv-field-menu').classList.add('hidden'); }
     updateLayoutOffsets();
   });
 
@@ -1170,6 +1193,117 @@
         window.ntcToast('Could not reach the server.', true);
       }
     });
+  });
+
+  // ---------------------------------------------------------------- "+ Field" picker
+  // Every column on this record is already sent to the page by
+  // /api/print-data (FIELDS), so the list below needs no new endpoint -- it
+  // is simply everything the record has, with its current value shown so you
+  // can tell which field is which without knowing the column names.
+  //
+  // This exists because a field with no box on the layout renders nothing and
+  // gives no hint why. Call Sign and Hours of Operation were both in the
+  // database with real data, but had no box on the certificate at all.
+  const fieldBtn = document.getElementById('ppv-add-field');
+  const fieldMenu = document.getElementById('ppv-field-menu');
+  const fieldList = document.getElementById('ppv-field-list');
+  const fieldSearch = document.getElementById('ppv-field-search');
+
+  function fieldsAlreadyPlaced() {
+    const used = new Set();
+    (TEMPLATE.boxes || []).forEach(function (b) {
+      (b.paragraphs || []).forEach(function (p) {
+        (p.runs || []).forEach(function (r) { if (r.type === 'field') used.add(r.field); });
+      });
+    });
+    return used;
+  }
+
+  function renderFieldList() {
+    const q = (fieldSearch.value || '').trim().toLowerCase();
+    const used = fieldsAlreadyPlaced();
+    const names = Object.keys(FIELDS).sort();
+    const rows = names.filter(function (f) {
+      if (!q) return true;
+      return f.toLowerCase().indexOf(q) !== -1 ||
+             String(FIELDS[f] || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (!rows.length) {
+      fieldList.innerHTML = '<p class="px-3 py-3 text-xs text-gray-400">No field matches that.</p>';
+      return;
+    }
+    fieldList.innerHTML = rows.map(function (f) {
+      const val = String(FIELDS[f] === undefined || FIELDS[f] === null ? '' : FIELDS[f]).trim();
+      const onPage = used.has(f);
+      return '<button data-field="' + window.ntcEsc(f) + '" ' +
+        'class="ppv-field-pick w-full text-left px-3 py-1.5 hover:bg-brand-50 flex items-baseline gap-2">' +
+        '<span class="font-mono text-[11px] text-brand-700 shrink-0">' + window.ntcEsc(f) + '</span>' +
+        '<span class="text-[11px] text-gray-500 truncate flex-1">' +
+          (val ? window.ntcEsc(val.length > 34 ? val.slice(0, 34) + '\u2026' : val)
+               : '<span class="italic text-gray-300">(empty on this record)</span>') +
+        '</span>' +
+        (onPage ? '<span class="text-[9px] uppercase tracking-wide text-gray-400 shrink-0">on page</span>' : '') +
+        '</button>';
+    }).join('');
+    fieldList.querySelectorAll('.ppv-field-pick').forEach(function (btn) {
+      btn.addEventListener('click', function () { placeField(btn.dataset.field); });
+    });
+  }
+
+  // Each newly placed field is stepped down-and-right from the last one, so
+  // adding two in a row doesn't drop them exactly on top of each other (the
+  // first version did, and two overlapping fields just look like corrupted
+  // text). Wraps back to the start after 12 so they stay on the page.
+  let fieldDropCount = 0;
+  function placeField(fieldName) {
+    pushUndo();
+    const slot = fieldDropCount++ % 12;
+    const box = {
+      id: 'field' + Date.now() + '_' + (nextCustomId++),
+      x: 60 + slot * 12, y: 250 + slot * 24, w: 150, h: 20,
+      paragraphs: [{ align: 'left', runs: [
+        { type: 'field', field: fieldName, bold: false, size: 10, font: 'Helvetica' },
+      ] }],
+    };
+    TEMPLATE.boxes.push(box);
+    renderAll();
+    const el = pageEl.querySelector('.ppv-box[data-id="' + box.id + '"]');
+    if (el) { selectBox(el); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    fieldMenu.classList.add('hidden');
+    window.ntcToast('Added "' + fieldName + '". Drag it into place, then click Save Layout.');
+  }
+
+  function positionFieldMenu() {
+    const r = fieldBtn.getBoundingClientRect();
+    const w = fieldMenu.offsetWidth || 320;
+    fieldMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    fieldMenu.style.top = (r.bottom + 4) + 'px';
+    fieldMenu.style.maxHeight = Math.max(180, window.innerHeight - r.bottom - 24) + 'px';
+    fieldList.style.maxHeight = Math.max(120, window.innerHeight - r.bottom - 110) + 'px';
+  }
+
+  fieldBtn.addEventListener('click', function (evt) {
+    evt.stopPropagation();
+    const opening = fieldMenu.classList.contains('hidden');
+    fieldMenu.classList.toggle('hidden');
+    if (opening) {
+      fieldSearch.value = '';
+      renderFieldList();
+      positionFieldMenu();
+      fieldSearch.focus();
+    }
+  });
+  fieldSearch.addEventListener('input', renderFieldList);
+  // don't let typing in the search box trigger the page's keyboard shortcuts
+  fieldSearch.addEventListener('keydown', function (e) { e.stopPropagation(); });
+  document.addEventListener('click', function (evt) {
+    if (!fieldMenu.contains(evt.target) && evt.target !== fieldBtn) fieldMenu.classList.add('hidden');
+  });
+  window.addEventListener('resize', function () {
+    if (!fieldMenu.classList.contains('hidden')) positionFieldMenu();
+  });
+  mainToolbarEl.addEventListener('scroll', function () {
+    if (!fieldMenu.classList.contains('hidden')) positionFieldMenu();
   });
 
   // ---------------------------------------------------------------- Layout History
