@@ -895,9 +895,14 @@
   // ---------------------------------------------------------------- Arrow-key nudging
   // Dragging with the mouse is fine for roughly placing a box, but lining
   // one up exactly with a pre-printed form needs single steps you can count.
-  //   Arrow            = 1pt   (1/72 inch)  -- fine adjustment
-  //   Shift + Arrow    = 10pt               -- coarse
-  //   Ctrl/Cmd + Arrow = resize instead of move
+  //   Arrow            = 0.25pt (1/288 inch, ~0.09mm) -- finest adjustment
+  //   Shift + Arrow    = 10pt                          -- coarse
+  //   Ctrl/Cmd + Arrow = resize instead of move (same two step sizes)
+  //
+  // 0.25pt is finer than any office printer can actually resolve, so this is
+  // as precise as it is ever useful to be -- the limit is the paper, not the
+  // app. Values are rounded to 2 decimals as they are applied, so repeated
+  // nudging can't drift into numbers like 27.30000000000001.
   // Works on the selected text box, and on the OR/DST stamp image when that
   // is the thing selected.
   //
@@ -906,19 +911,20 @@
   // single undo entry -- it opens on the first key press and closes when the
   // key is released.
   let nudgeGroup = false;
+  function round2(v) { return Math.round(v * 100) / 100; }
   function nudgeSelected(dx, dy, resize) {
     // a text box takes priority; otherwise fall back to the stamp image
     if (SELECTED_BOX) {
       const box = findBox(SELECTED_BOX.dataset.id);
       if (!box) return false;
       if (resize) {
-        box.w = Math.max(10, (box.w || 0) + dx);
-        box.h = Math.max(10, (box.h || 0) + dy);
+        box.w = round2(Math.max(10, (box.w || 0) + dx));
+        box.h = round2(Math.max(10, (box.h || 0) + dy));
         SELECTED_BOX.style.width = box.w + 'pt';
         SELECTED_BOX.style.height = box.h + 'pt';
       } else {
-        box.x = Math.max(0, (box.x || 0) + dx);
-        box.y = Math.max(0, (box.y || 0) + dy);
+        box.x = round2(Math.max(0, (box.x || 0) + dx));
+        box.y = round2(Math.max(0, (box.y || 0) + dy));
         SELECTED_BOX.style.left = box.x + 'pt';
         SELECTED_BOX.style.top = box.y + 'pt';
       }
@@ -928,13 +934,13 @@
     if (stampWrapEl && stampWrapEl.classList.contains('selected') && TEMPLATE.image) {
       const img = TEMPLATE.image;
       if (resize) {
-        img.w = Math.max(10, (img.w || 0) + dx);
-        img.h = Math.max(10, (img.h || 0) + dy);
+        img.w = round2(Math.max(10, (img.w || 0) + dx));
+        img.h = round2(Math.max(10, (img.h || 0) + dy));
         stampWrapEl.style.width = img.w + 'pt';
         stampWrapEl.style.height = img.h + 'pt';
       } else {
-        img.x = Math.max(0, (img.x || 0) + dx);
-        img.y = Math.max(0, (img.y || 0) + dy);
+        img.x = round2(Math.max(0, (img.x || 0) + dx));
+        img.y = round2(Math.max(0, (img.y || 0) + dy));
         stampWrapEl.style.left = img.x + 'pt';
         stampWrapEl.style.top = img.y + 'pt';
       }
@@ -953,7 +959,7 @@
     if (document.activeElement && document.activeElement.contentEditable === 'true') return;
     if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
-    const step = evt.shiftKey ? 10 : 1;
+    const step = evt.shiftKey ? 10 : 0.25;
     const resize = evt.ctrlKey || evt.metaKey;
     if (!nudgeGroup) { pushUndo(); nudgeGroup = true; }
     if (nudgeSelected(dir[0] * step, dir[1] * step, resize)) {
@@ -979,8 +985,10 @@
       el.innerHTML = '&mdash;';
       return;
     }
-    const inch = function (v) { return ((v || 0) / 72).toFixed(2); };
-    const pt = function (v) { return Math.round((v || 0) * 10) / 10; };
+    // 3 decimals on inches and 2 on points, so a 0.25pt nudge is actually
+    // visible in the readout instead of rounding away to the same number.
+    const inch = function (v) { return ((v || 0) / 72).toFixed(3); };
+    const pt = function (v) { return ((v || 0)).toFixed(2); };
     el.textContent = 'X ' + inch(x) + '" Y ' + inch(y) + '"  ·  ' +
                      pt(x) + ', ' + pt(y) + ' pt  ·  ' + pt(w) + '\u00d7' + pt(h) + ' pt';
   }
