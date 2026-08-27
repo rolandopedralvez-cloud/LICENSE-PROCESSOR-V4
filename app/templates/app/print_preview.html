@@ -141,7 +141,15 @@
 
       <span class="w-px h-5 bg-white/15"></span>
 
-      <button id="ppv-edit-fieldval" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 transition-colors" title="Fix the actual stored value for this record's field -- e.g. clean up messy Frequency text">Edit Value&hellip;</button>
+      <button id="ppv-edit-fieldval" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 transition-colors" title="Fix the actual stored value for this record's field -- e.g. clean up messy text">Edit Value&hellip;</button>
+
+      <span class="w-px h-5 bg-white/15"></span>
+
+      <!-- Live position/size of the selected box, so nudging with the arrow
+           keys is something you can read rather than guess at. Shown in
+           inches (what a printed form is measured in) with the exact points
+           value after it. -->
+      <span id="ppv-pos-readout" class="font-mono text-[11px] text-gray-300 whitespace-nowrap" title="Position from the top-left corner of the page, and the box size">&mdash;</span>
     </div>
 
     <span class="text-gray-400 ml-auto hidden lg:inline" title="e.g. type Owner: {licensee} to mix plain text with a live field">Double-click text to edit &middot; type {fieldname} for a merge field</span>
@@ -244,20 +252,27 @@
   #ppv-page.design-on #ppv-stamp-wrap:hover { outline-color: #a78bfa; }
   #ppv-stamp-wrap.selected { outline: 1px solid #6d28d9 !important; }
   #ppv-stamp-wrap.selected #ppv-stamp-handle { display: block; }
-  /* Alignment grid -- lines every 36pt (0.5in) with a darker line every
-     72pt (1in), for lining boxes up by eye. Only ever shown while
-     #ppv-page has the design-on class (Design Mode toggle in JS), and
-     never intercepts clicks so it can't get in the way of dragging boxes
-     underneath it. */
+  /* Alignment grid -- three sizes of square so you can line boxes up by
+     eye at whatever precision you need:
+        every  9pt (1/8 in) -- faintest, the fine grid
+        every 36pt (1/2 in) -- medium
+        every 72pt (1 in)   -- strongest
+     The 9pt squares match one press of an arrow key x9, and 36/72 give you
+     the half-inch and inch guides to check against a printed form.
+     Only ever shown while #ppv-page has the design-on class (Design Mode
+     toggle in JS), and never intercepts clicks so it can't get in the way
+     of dragging boxes underneath it. */
   #ppv-grid {
     /* no z-index -- it stays below the boxes/stamp purely by DOM order
        (it's the first child of #ppv-page), so text is never obscured */
     position: absolute; inset: 0; display: none; pointer-events: none;
     background-image:
-      repeating-linear-gradient(to right, rgba(109,41,217,0.35) 0, rgba(109,41,217,0.35) 1px, transparent 1px, transparent 72pt),
-      repeating-linear-gradient(to bottom, rgba(109,41,217,0.35) 0, rgba(109,41,217,0.35) 1px, transparent 1px, transparent 72pt),
-      repeating-linear-gradient(to right, rgba(109,41,217,0.12) 0, rgba(109,41,217,0.12) 1px, transparent 1px, transparent 36pt),
-      repeating-linear-gradient(to bottom, rgba(109,41,217,0.12) 0, rgba(109,41,217,0.12) 1px, transparent 1px, transparent 36pt);
+      repeating-linear-gradient(to right, rgba(109,41,217,0.38) 0, rgba(109,41,217,0.38) 1px, transparent 1px, transparent 72pt),
+      repeating-linear-gradient(to bottom, rgba(109,41,217,0.38) 0, rgba(109,41,217,0.38) 1px, transparent 1px, transparent 72pt),
+      repeating-linear-gradient(to right, rgba(109,41,217,0.16) 0, rgba(109,41,217,0.16) 1px, transparent 1px, transparent 36pt),
+      repeating-linear-gradient(to bottom, rgba(109,41,217,0.16) 0, rgba(109,41,217,0.16) 1px, transparent 1px, transparent 36pt),
+      repeating-linear-gradient(to right, rgba(109,41,217,0.07) 0, rgba(109,41,217,0.07) 1px, transparent 1px, transparent 9pt),
+      repeating-linear-gradient(to bottom, rgba(109,41,217,0.07) 0, rgba(109,41,217,0.07) 1px, transparent 1px, transparent 9pt);
   }
   #ppv-page.design-on #ppv-grid { display: block; }
 
@@ -549,6 +564,7 @@
       // "permanent" while Design Mode is on), just greyed out and inert
       // until something is picked.
       boxToolbar.classList.toggle('ppv-empty', DESIGN_ON);
+      updatePosReadout();
       return;
     }
     boxToolbar.classList.remove('ppv-empty');
@@ -580,6 +596,7 @@
 
     positionBoxToolbar();
     boxToolbar.classList.remove('hidden');
+    updatePosReadout();
   }
 
   // ---- "Edit Value..." -- fixes the actual stored data for this one
@@ -864,14 +881,109 @@
       drag.box.y = Math.max(0, drag.startTop + dy);
       drag.boxEl.style.left = drag.box.x + 'pt';
       drag.boxEl.style.top = drag.box.y + 'pt';
+      updatePosReadout();
     } else {
       drag.box.w = Math.max(10, drag.startW + dx);
       drag.box.h = Math.max(10, drag.startH + dy);
       drag.boxEl.style.width = drag.box.w + 'pt';
       drag.boxEl.style.height = drag.box.h + 'pt';
+      updatePosReadout();
     }
   });
   document.addEventListener('mouseup', function () { drag = null; });
+
+  // ---------------------------------------------------------------- Arrow-key nudging
+  // Dragging with the mouse is fine for roughly placing a box, but lining
+  // one up exactly with a pre-printed form needs single steps you can count.
+  //   Arrow            = 1pt   (1/72 inch)  -- fine adjustment
+  //   Shift + Arrow    = 10pt               -- coarse
+  //   Ctrl/Cmd + Arrow = resize instead of move
+  // Works on the selected text box, and on the OR/DST stamp image when that
+  // is the thing selected.
+  //
+  // Holding a key down repeats, which would otherwise push one undo step per
+  // repeat and make Ctrl+Z useless. nudgeGroup groups a whole burst into a
+  // single undo entry -- it opens on the first key press and closes when the
+  // key is released.
+  let nudgeGroup = false;
+  function nudgeSelected(dx, dy, resize) {
+    // a text box takes priority; otherwise fall back to the stamp image
+    if (SELECTED_BOX) {
+      const box = findBox(SELECTED_BOX.dataset.id);
+      if (!box) return false;
+      if (resize) {
+        box.w = Math.max(10, (box.w || 0) + dx);
+        box.h = Math.max(10, (box.h || 0) + dy);
+        SELECTED_BOX.style.width = box.w + 'pt';
+        SELECTED_BOX.style.height = box.h + 'pt';
+      } else {
+        box.x = Math.max(0, (box.x || 0) + dx);
+        box.y = Math.max(0, (box.y || 0) + dy);
+        SELECTED_BOX.style.left = box.x + 'pt';
+        SELECTED_BOX.style.top = box.y + 'pt';
+      }
+      updatePosReadout();
+      return true;
+    }
+    if (stampWrapEl && stampWrapEl.classList.contains('selected') && TEMPLATE.image) {
+      const img = TEMPLATE.image;
+      if (resize) {
+        img.w = Math.max(10, (img.w || 0) + dx);
+        img.h = Math.max(10, (img.h || 0) + dy);
+        stampWrapEl.style.width = img.w + 'pt';
+        stampWrapEl.style.height = img.h + 'pt';
+      } else {
+        img.x = Math.max(0, (img.x || 0) + dx);
+        img.y = Math.max(0, (img.y || 0) + dy);
+        stampWrapEl.style.left = img.x + 'pt';
+        stampWrapEl.style.top = img.y + 'pt';
+      }
+      updatePosReadout();
+      return true;
+    }
+    return false;
+  }
+
+  document.addEventListener('keydown', function (evt) {
+    if (!DESIGN_ON) return;
+    const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const dir = ARROWS[evt.key];
+    if (!dir) return;
+    // never hijack the arrow keys while typing into a box or a form control
+    if (document.activeElement && document.activeElement.contentEditable === 'true') return;
+    if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+    const step = evt.shiftKey ? 10 : 1;
+    const resize = evt.ctrlKey || evt.metaKey;
+    if (!nudgeGroup) { pushUndo(); nudgeGroup = true; }
+    if (nudgeSelected(dir[0] * step, dir[1] * step, resize)) {
+      evt.preventDefault();   // stop the page scrolling under us
+    }
+  });
+  document.addEventListener('keyup', function (evt) {
+    if (evt.key && evt.key.indexOf('Arrow') === 0) nudgeGroup = false;
+  });
+
+  // ---- position readout (black bar) --------------------------------------
+  function updatePosReadout() {
+    const el = document.getElementById('ppv-pos-readout');
+    if (!el) return;
+    let x, y, w, h;
+    if (SELECTED_BOX) {
+      const box = findBox(SELECTED_BOX.dataset.id);
+      if (!box) { el.innerHTML = '&mdash;'; return; }
+      x = box.x; y = box.y; w = box.w; h = box.h;
+    } else if (stampWrapEl && stampWrapEl.classList.contains('selected') && TEMPLATE.image) {
+      const i = TEMPLATE.image; x = i.x; y = i.y; w = i.w; h = i.h;
+    } else {
+      el.innerHTML = '&mdash;';
+      return;
+    }
+    const inch = function (v) { return ((v || 0) / 72).toFixed(2); };
+    const pt = function (v) { return Math.round((v || 0) * 10) / 10; };
+    el.textContent = 'X ' + inch(x) + '" Y ' + inch(y) + '"  ·  ' +
+                     pt(x) + ', ' + pt(y) + ' pt  ·  ' + pt(w) + '\u00d7' + pt(h) + ' pt';
+  }
 
   // ---------------------------------------------------------------- OR/DST stamp image
   // Draggable and resizable in Design mode, same as a text box, via its own
@@ -882,6 +994,7 @@
   let imgDrag = null;
 
   function selectImage() {
+    setTimeout(updatePosReadout, 0);
     if (SELECTED_BOX) { SELECTED_BOX.classList.remove('selected'); SELECTED_BOX = null; }
     boxToolbar.classList.add('hidden');
     document.getElementById('ppv-delete-box').classList.add('hidden');
@@ -912,11 +1025,13 @@
       TEMPLATE.image.y = Math.max(0, imgDrag.startTop + dy);
       stampWrapEl.style.left = TEMPLATE.image.x + 'pt';
       stampWrapEl.style.top = TEMPLATE.image.y + 'pt';
+      updatePosReadout();
     } else {
       TEMPLATE.image.w = Math.max(10, imgDrag.startW + dx);
       TEMPLATE.image.h = Math.max(10, imgDrag.startH + dy);
       stampWrapEl.style.width = TEMPLATE.image.w + 'pt';
       stampWrapEl.style.height = TEMPLATE.image.h + 'pt';
+      updatePosReadout();
     }
   });
   document.addEventListener('mouseup', function () { imgDrag = null; });
