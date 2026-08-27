@@ -75,16 +75,9 @@
 
     <div class="ppv-group">
       <div class="flex items-center gap-1.5">
-        <div class="relative">
-          <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">Layout History &#9662;</button>
-          <div id="ppv-history-menu" class="hidden absolute left-0 mt-1 w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-100 py-1 z-40 text-sm max-h-[28rem] overflow-y-auto">
-            <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
-            <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
-            <div class="h-px bg-gray-100 my-1"></div>
-            <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
-            <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
-          </div>
-        </div>
+        <!-- The dropdown itself is NOT here -- see #ppv-history-menu near the
+             bottom of this file. It has to live outside the toolbar entirely. -->
+        <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">Layout History &#9662;</button>
         <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-200 text-amber-700 rounded-md px-3 py-1.5 bg-white hover:bg-amber-50 transition-colors">Reset to Default</button>
         <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Save Layout</button>
       </div>
@@ -193,6 +186,26 @@
     <!-- boxes injected here by JS -->
   </div>
   </div><!-- /#ppv-scroll -->
+
+  <!-- ---- Layout History dropdown ---------------------------------------
+       Deliberately placed here, as the last child of #ppv-shell, and NOT
+       next to its button inside the toolbar.
+
+       The toolbar is a scroll container (overflow-x:auto, so its buttons
+       stay reachable on a narrow screen). A scroll container keeps its
+       whole subtree in one paint layer, so this menu -- even as a
+       position:fixed element with a high z-index -- was painted underneath
+       the black box-editor bar that follows the toolbar, hiding the top
+       half of the menu including both of its buttons. Out here it has
+       nothing above it. Its top/left are set from the button's position by
+       positionHistoryMenu() in the script below. -->
+  <div id="ppv-history-menu" class="no-print hidden fixed w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-200 py-1 z-50 text-sm overflow-y-auto">
+    <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
+    <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
+    <div class="h-px bg-gray-100 my-1"></div>
+    <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
+    <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+  </div>
 </div>
 
 <style>
@@ -1050,11 +1063,32 @@
   const historyMenu = document.getElementById('ppv-history-menu');
   const historyList = document.getElementById('ppv-history-list');
 
+  // Places the menu directly under the Layout History button. Recomputed on
+  // every open (and on resize) because the button moves as the ribbon wraps
+  // to more or fewer rows depending on the window width.
+  function positionHistoryMenu() {
+    const r = historyBtn.getBoundingClientRect();
+    const menuW = historyMenu.offsetWidth || 288;
+    // keep it on screen if the button sits near the right edge
+    let left = Math.min(r.left, window.innerWidth - menuW - 8);
+    historyMenu.style.left = Math.max(8, left) + 'px';
+    historyMenu.style.top = (r.bottom + 4) + 'px';
+    // never let it run off the bottom of the window
+    historyMenu.style.maxHeight = Math.max(160, window.innerHeight - r.bottom - 24) + 'px';
+  }
+
   historyBtn.addEventListener('click', function (evt) {
     evt.stopPropagation();
     const opening = historyMenu.classList.contains('hidden');
     historyMenu.classList.toggle('hidden');
-    if (opening) loadHistoryList();
+    if (opening) { positionHistoryMenu(); loadHistoryList(); }
+  });
+  window.addEventListener('resize', function () {
+    if (!historyMenu.classList.contains('hidden')) positionHistoryMenu();
+  });
+  // The ribbon scrolls sideways on a narrow screen -- keep the menu with its button.
+  mainToolbarEl.addEventListener('scroll', function () {
+    if (!historyMenu.classList.contains('hidden')) positionHistoryMenu();
   });
   document.addEventListener('click', function (evt) {
     if (!historyMenu.contains(evt.target) && evt.target !== historyBtn) historyMenu.classList.add('hidden');
