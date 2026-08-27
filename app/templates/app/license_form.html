@@ -8,8 +8,8 @@
 {% endblock %}
 {% block app_content %}
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
+<script src="/static/vendor/leaflet.js"></script>
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
 <div class="xl:col-span-2 min-w-0">
@@ -514,6 +514,50 @@ function showStatus(msg, isError) {
   statusBox.classList.add(isError ? 'bg-red-50' : 'bg-green-50', isError ? 'text-red-600' : 'text-green-700');
 }
 
+// ---- Unsaved-changes guard -------------------------------------------
+// This form has dozens of fields. Until now there was nothing anywhere in
+// the app listening for beforeunload, so filling it in and then mis-clicking
+// a sidebar link (or hitting Back) threw the whole lot away with no warning
+// and no way to get it back. NTC_FORM_CLEAN() is called after a successful
+// save, and before any navigation we do on purpose, so the warning only
+// appears when there really are unsaved edits.
+var NTC_FORM_CLEAN, NTC_FORM_DIRTY;
+(function () {
+  const form = document.getElementById('license-form');
+  function snapshot() {
+    try { return JSON.stringify(Object.fromEntries(new FormData(form).entries())); }
+    catch (e) { return null; }
+  }
+  let saved = snapshot();
+  let suppressed = false;
+  NTC_FORM_CLEAN = function () { suppressed = true; saved = snapshot(); };
+  NTC_FORM_DIRTY = function () { return !suppressed && saved !== null && snapshot() !== saved; };
+  // any real edit re-arms the warning
+  form.addEventListener('input', function () { suppressed = false; });
+  form.addEventListener('change', function () { suppressed = false; });
+  window.addEventListener('beforeunload', function (e) {
+    if (!NTC_FORM_DIRTY()) return;
+    e.preventDefault();
+    e.returnValue = '';   // browsers show their own standard wording here
+    return '';
+  });
+  // Leaving via a link inside the app gets a clearer, dismissible prompt
+  // than the browser's generic one.
+  document.addEventListener('click', function (evt) {
+    const a = evt.target.closest('a[href]');
+    if (!a || a.target === '_blank') return;
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('#') || href.startsWith('javascript:')) return;
+    if (!NTC_FORM_DIRTY()) return;
+    if (!confirm('You have unsaved changes on this record.\n\nLeave without saving? Your edits will be lost.')) {
+      evt.preventDefault();
+      evt.stopPropagation();
+    } else {
+      NTC_FORM_CLEAN();
+    }
+  }, true);
+})();
+
 document.getElementById('license-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target).entries());
@@ -529,8 +573,10 @@ document.getElementById('license-form').addEventListener('submit', function (e) 
         return;
       }
       if (LIC_ID) {
+        NTC_FORM_CLEAN();          // saved -- stop warning about unsaved edits
         showStatus('Saved.', false);
       } else {
+        NTC_FORM_CLEAN();          // about to navigate to the new record
         window.location.href = '/app/licenses/' + r.body.id;
       }
     } catch (err) {
@@ -553,6 +599,7 @@ document.getElementById('btn-save-as-new').addEventListener('click', function (e
     try {
       const r = await window.ntcFetchJSON('/api/licenses', { method: 'POST', body: JSON.stringify(data) });
       if (!r.ok) { showStatus((r.body && r.body.detail) || 'Save as New failed. Nothing was created.', true); return; }
+      NTC_FORM_CLEAN();
       window.location.href = '/app/licenses/' + r.body.id;
     } catch (err) {
       showStatus('Could not reach the server — nothing was created.', true);
@@ -566,6 +613,7 @@ document.getElementById('btn-delete').addEventListener('click', function (evt) {
     try {
       const r = await window.ntcFetchJSON('/api/licenses/{{ lic_id }}', { method: 'DELETE' });
       if (!r.ok) { showStatus((r.body && r.body.detail) || 'Delete failed.', true); return; }
+      NTC_FORM_CLEAN();   // record is gone; don't warn about edits to it
       window.location.href = '/app';
     } catch (err) {
       showStatus('Could not reach the server — record was not deleted.', true);

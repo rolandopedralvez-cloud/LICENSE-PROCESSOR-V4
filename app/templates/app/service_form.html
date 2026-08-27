@@ -297,6 +297,45 @@
 
   let PENDING_SAVE_DATA = null;
 
+  // ---- Unsaved-changes guard -----------------------------------------
+  // Same protection as the licence form: this screen's fields are built by
+  // JS rather than a <form>, so the snapshot reads the field inputs
+  // directly. Without this, filling in a record and mis-clicking a link
+  // discarded everything silently.
+  var NTC_SVC_CLEAN;
+  (function () {
+    function snapshot() {
+      try {
+        const d = {};
+        canvasEl.querySelectorAll('input[data-key], textarea[data-key], select[data-key]').forEach(function (el) {
+          d[el.dataset.key] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value;
+        });
+        return JSON.stringify(d);
+      } catch (e) { return null; }
+    }
+    let saved = null, suppressed = false;
+    // The fields are rendered asynchronously, so take the baseline once
+    // they exist rather than on script load (when the canvas is empty).
+    setTimeout(function () { saved = snapshot(); }, 600);
+    NTC_SVC_CLEAN = function () { suppressed = true; saved = snapshot(); };
+    function dirty() { return !suppressed && saved !== null && snapshot() !== saved; }
+    document.addEventListener('input', function () { suppressed = false; }, true);
+    window.addEventListener('beforeunload', function (e) {
+      if (!dirty()) return;
+      e.preventDefault(); e.returnValue = ''; return '';
+    });
+    document.addEventListener('click', function (evt) {
+      const a = evt.target.closest('a[href]');
+      if (!a || a.target === '_blank') return;
+      const href = a.getAttribute('href') || '';
+      if (href.startsWith('#') || href.startsWith('javascript:')) return;
+      if (!dirty()) return;
+      if (!confirm('You have unsaved changes on this record.\n\nLeave without saving? Your edits will be lost.')) {
+        evt.preventDefault(); evt.stopPropagation();
+      } else { NTC_SVC_CLEAN(); }
+    }, true);
+  })();
+
   document.getElementById('svc-save-record').addEventListener('click', function () {
     const data = {};
     canvasEl.querySelectorAll('input[data-key], textarea[data-key], select[data-key]').forEach(function (el) {
@@ -356,6 +395,7 @@
       if (!r.ok) { window.ntcToast('Could not save the record.', true); return; }
       document.getElementById('svc-review-modal').classList.add('hidden');
       window.ntcToast('Saved.');
+      NTC_SVC_CLEAN();
       window.location.href = '/app/services/' + SERVICE_ID + '/records/' + r.body.id;
     });
   });
@@ -366,6 +406,7 @@
     window.ntcBusy(evt.currentTarget, async function () {
       const r = await window.ntcFetchJSON('/api/services/' + SERVICE_ID + '/records/' + RECORD_ID, { method: 'DELETE' });
       if (!r.ok) { window.ntcToast('Could not delete the record.', true); return; }
+      NTC_SVC_CLEAN();   // record is gone; don't warn about edits to it
       window.location.href = '/app/services/' + SERVICE_ID + '/records';
     });
   });

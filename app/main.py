@@ -44,6 +44,19 @@ ensure_services_schema()
 
 app = FastAPI(title="NTC R02 Telco Database", version="2.0")
 
+# ---- Local copies of Tailwind / htmx / Leaflet ------------------------
+# These used to load from the internet (cdn.tailwindcss.com, unpkg.com).
+# On an office PC with no connection -- or behind a filter that blocks
+# those hosts -- every one of those requests fails and the app renders as
+# unstyled text with dead buttons and no maps, which looks exactly like
+# the app itself is broken. They're served from app/static/ now, so the
+# app works the same whether or not this PC is online.
+import os as _os
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_STATIC_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "static")
+if _os.path.isdir(_STATIC_DIR):
+    app.mount("/static", _StaticFiles(directory=_STATIC_DIR), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],

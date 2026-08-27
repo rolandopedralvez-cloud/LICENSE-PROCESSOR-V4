@@ -152,13 +152,22 @@ def get_print_pdf_batch(ids: str, request: Request):
     used_names = set()
     added = 0
     total = len(id_list)
+    # Records that couldn't be turned into a PDF used to be skipped in
+    # silence: a Mass Print of 50 came back as a ZIP of 43 and the office
+    # printed the batch without ever noticing the 7 that were missing.
+    # They're collected here and reported in the response headers, and a
+    # plain-text list is dropped inside the ZIP itself so it can't be
+    # overlooked.
+    failures = []
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for i, lic_id in enumerate(id_list, start=1):
             try:
                 pdf_bytes = print_builtin.build_pdf(lic_id, batch_index=i, batch_total=total)
-            except Exception:
+            except Exception as e:
+                failures.append((lic_id, f"could not be generated ({type(e).__name__})"))
                 continue
             if pdf_bytes is None:
+                failures.append((lic_id, "record not found, or it is in the Trash"))
                 continue
             record = print_builtin.fetch_record(lic_id)
             license_no = (record or {}).get("license_no") or f"License_{lic_id}"
@@ -172,10 +181,29 @@ def get_print_pdf_batch(ids: str, request: Request):
             zf.writestr(name, pdf_bytes)
             added += 1
 
+        if failures:
+            lines = [
+                "MASS PRINT — RECORDS THAT WERE NOT INCLUDED",
+                "=" * 44,
+                f"Asked for : {total}",
+                f"Printed   : {added}",
+                f"Missing   : {len(failures)}",
+                "",
+                "These records are NOT in this ZIP:",
+            ]
+            lines += [f"  - record #{rid}: {why}" for rid, why in failures]
+            lines += ["", "Fix or restore them, then print those records again."]
+            zf.writestr("_NOT_PRINTED_README.txt", "\n".join(lines))
+
     if added == 0:
         raise HTTPException(404, "None of the given records could be found")
 
+    headers = {"Content-Disposition": 'attachment; filename="Batch_Print.zip"',
+               "X-Batch-Requested": str(total),
+               "X-Batch-Printed": str(added),
+               "X-Batch-Failed": str(len(failures))}
+    if failures:
+        headers["X-Batch-Failed-Ids"] = ",".join(str(rid) for rid, _ in failures)
     return Response(
-        content=zip_buf.getvalue(), media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="Batch_Print.zip"'},
+        content=zip_buf.getvalue(), media_type="application/zip", headers=headers,
     )

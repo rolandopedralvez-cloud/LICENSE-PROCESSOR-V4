@@ -91,24 +91,54 @@
   </div>
   <div class="p-4">
     <p class="text-xs text-gray-400 mb-3">Click a row to view/edit. Delete moves a record to Trash (recoverable).</p>
-    <div class="relative">
-      <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/>
-      </svg>
-      <input
-        type="search"
-        name="q"
-        id="ntc-main-search"
-        placeholder="Licensee, license no., or site name..."
-        class="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-        hx-get="/app/licenses/results"
-        hx-trigger="keyup changed delay:300ms, load"
-        hx-target="#results"
-        hx-indicator="#spinner"
-        autocomplete="off"
-      >
+
+    {# Everything the search depends on lives inside #ntc-search-form, and
+       every control sends the whole group with hx-include -- so the text
+       box, the three filters and the current sort always travel together
+       and can't get out of step with each other. #}
+    <div id="ntc-search-form">
+      <div class="relative">
+        <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input
+          type="search"
+          name="q"
+          id="ntc-main-search"
+          placeholder="License no., licensee, site, barangay, municipality, province, technology, OR no..."
+          class="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+          hx-get="/app/licenses/results"
+          hx-trigger="keyup changed delay:300ms, search, load"
+          hx-target="#results"
+          hx-include="#ntc-search-form"
+          hx-indicator="#spinner"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 mt-3">
+        <span class="text-xs text-gray-400">Filter:</span>
+        <select name="province" id="flt-province"
+                class="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white hover:border-gray-400 transition-colors"
+                hx-get="/app/licenses/results" hx-trigger="change" hx-target="#results"
+                hx-include="#ntc-search-form" hx-indicator="#spinner">
+          <option value="">All provinces</option>
+        </select>
+        <select name="status" id="flt-status"
+                class="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white hover:border-gray-400 transition-colors"
+                hx-get="/app/licenses/results" hx-trigger="change" hx-target="#results"
+                hx-include="#ntc-search-form" hx-indicator="#spinner">
+          <option value="">All statuses</option>
+        </select>
+        <select name="licensee" id="flt-licensee"
+                class="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white hover:border-gray-400 transition-colors max-w-[220px]"
+                hx-get="/app/licenses/results" hx-trigger="change" hx-target="#results"
+                hx-include="#ntc-search-form" hx-indicator="#spinner">
+          <option value="">All licensees</option>
+        </select>
+        <span id="spinner" class="htmx-indicator text-xs text-gray-400">Searching&hellip;</span>
+      </div>
     </div>
-    <span id="spinner" class="htmx-indicator text-xs text-gray-400">Searching&hellip;</span>
   </div>
 </div>
 
@@ -140,11 +170,11 @@
 </div>
 
 <!-- ============================== PIN-SELECTED-TO-MAP MODAL ============================== -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
+<script src="/static/vendor/leaflet.js"></script>
+<link rel="stylesheet" href="/static/vendor/MarkerCluster.css"/>
+<link rel="stylesheet" href="/static/vendor/MarkerCluster.Default.css"/>
+<script src="/static/vendor/leaflet.markercluster.js"></script>
 
 <div id="ntc-map-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
   <div class="bg-white rounded-md shadow-lg w-full max-w-4xl">
@@ -234,6 +264,63 @@
     document.getElementById('map-sel-count').textContent = EXPORT_SEL.size;
     mapBtn.disabled = EXPORT_SEL.size === 0;
   }
+
+  // ---- Whole row opens the record ------------------------------------
+  // The hint under the search box has always said "Click a row to
+  // view/edit", and the rows highlight on hover as though they're
+  // clickable -- but only the small "View / Edit" link actually did
+  // anything, so clicking the row did nothing at all. Clicks on the
+  // checkbox (or the link itself) are left alone so selecting rows for
+  // Export/Map still works exactly as before.
+  document.getElementById('results').addEventListener('click', function (e) {
+    if (e.target.closest('a, button, input, label')) return;
+    const row = e.target.closest('tr.ntc-row');
+    if (!row || !row.dataset.href) return;
+    window.location.href = row.dataset.href;
+  });
+
+  // Select-all ticks every row currently loaded on screen.
+  document.getElementById('results').addEventListener('change', function (e) {
+    if (e.target.id !== 'ntc-select-all') return;
+    const on = e.target.checked;
+    document.querySelectorAll('#results .ntc-row-select').forEach(function (cb) {
+      if (cb.checked !== on) { cb.checked = on; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+  });
+
+  // "Clear search & filters" -- resets everything and re-runs the search.
+  document.getElementById('results').addEventListener('click', function (e) {
+    if (e.target.id !== 'ntc-clear-filters') return;
+    document.getElementById('ntc-main-search').value = '';
+    ['flt-province', 'flt-status', 'flt-licensee'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    htmx.ajax('GET', '/app/licenses/results', { target: '#results', source: '#ntc-main-search' });
+  });
+
+  // ---- Fill the filter dropdowns -------------------------------------
+  // /api/stats already returns by_province / by_status / by_licensee (it's
+  // the same call the stat cards at the top use), so the filters need no
+  // new endpoint -- just the counts it already sends.
+  window.ntcFetch('/api/stats').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d) return;
+    function fill(selectId, obj, allLabel) {
+      const sel = document.getElementById(selectId);
+      if (!sel || !obj) return;
+      const entries = Object.entries(obj)
+        .filter(function (kv) { return kv[0] && String(kv[0]).trim() !== ''; })
+        .sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
+      sel.innerHTML = '<option value="">' + allLabel + '</option>' +
+        entries.map(function (kv) {
+          return '<option value="' + window.ntcEsc(kv[0]) + '">' +
+                 window.ntcEsc(kv[0]) + ' (' + kv[1] + ')</option>';
+        }).join('');
+    }
+    fill('flt-province', d.by_province, 'All provinces');
+    fill('flt-status', d.by_status, 'All statuses');
+    fill('flt-licensee', d.by_licensee, 'All licensees');
+  }).catch(function () {});
 
   document.getElementById('results').addEventListener('change', function (e) {
     if (!e.target.classList.contains('ntc-row-select')) return;

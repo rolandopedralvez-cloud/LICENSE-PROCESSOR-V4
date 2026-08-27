@@ -90,6 +90,35 @@ def add_user(data: dict = Body(...), request: Request = None):
     existing_row = conn.execute("SELECT role, permissions FROM users WHERE username = ?", (username,)).fetchone()
     exists = existing_row is not None
 
+    # ---- Lockout guards -------------------------------------------------
+    # Manage Users could previously demote the ONLY Super Admin -- including
+    # yourself, taking effect on your very next click. That loses Manage
+    # Users, Settings, Backup, Activity Log and Wipe All permanently: the
+    # setup route refuses to run once any account exists, so the only way
+    # back in is running set_login.py from a command prompt. Both guards
+    # below refuse the change instead, with a plain-English reason.
+    if exists and existing_row["role"] == "super_admin" and role != "super_admin":
+        me = None
+        token = request.headers.get("authorization", "").replace("Bearer ", "").strip() if request else ""
+        info = TOKENS.get(token)
+        if info:
+            me = info.get("username")
+        if username == me:
+            conn.close()
+            raise HTTPException(400,
+                "You can't change your own account out of Super Admin while signed in as it — "
+                "you would immediately lose access to Manage Users and Settings. "
+                "Ask another Super Admin to do it, or create a second Super Admin first.")
+        remaining = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND username <> ?", (username,)
+        ).fetchone()[0]
+        if remaining == 0:
+            conn.close()
+            raise HTTPException(400,
+                f"'{username}' is the only Super Admin left. Changing this account to a normal user "
+                "would lock everyone out of Manage Users, Settings and Backup. "
+                "Create another Super Admin first, then change this one.")
+
     # Snapshot the before-state so we can write a clear audit trail entry —
     # who changed what, on an account that can print, delete, and export
     # real licensing records, is exactly the kind of thing that should be

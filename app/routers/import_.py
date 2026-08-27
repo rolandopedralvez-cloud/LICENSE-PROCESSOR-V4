@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Body, Query, Request
 from app.config import DB
 from app.core import (
     get_conn, cols, clean_payload, role_for, require_permission, log_activity,
-    _current_user_info, PROTECTED, IMPORT_CACHE,
+    _current_user_info, PROTECTED, IMPORT_CACHE, safe_db_backup,
 )
 
 router = APIRouter(tags=["import"])
@@ -87,7 +87,12 @@ def import_preview(data: dict = Body(...), request: Request = None):
     one or more fields — shown with the exact field-by-field difference so
     it can be reviewed before anything is written). Does NOT insert yet."""
     import base64, io, datetime, secrets
-    import openpyxl, print_stage
+    import openpyxl
+    # print_stage lives in app/legacy/, same as every other importer in
+    # this project (see analytics.py / scan.py). A bare `import
+    # print_stage` here raised ModuleNotFoundError, which made EVERY
+    # upload fail with a 500 -- the whole Import feature was dead.
+    from app.legacy import print_stage
 
     b64 = data.get("b64", "")
     src_filename = (data.get("filename") or "").strip()
@@ -145,8 +150,13 @@ def import_preview(data: dict = Body(...), request: Request = None):
     conn = get_conn()
     existing_by_lic = {}
     for lic_no in {r.get("license_no") for r in rows if r.get("license_no")}:
+        # Only LIVE records count as duplicates. This used to match trashed
+        # rows too, so a licence deleted last month made its own re-import
+        # look like a duplicate -- the user clicked "Import new only" and the
+        # record was silently never added back.
         row = conn.execute(
-            "SELECT * FROM licenses WHERE TRIM(license_no) = TRIM(?) ORDER BY id DESC LIMIT 1",
+            "SELECT * FROM licenses WHERE TRIM(license_no) = TRIM(?) AND deleted_at IS NULL "
+            "ORDER BY id DESC LIMIT 1",
             (lic_no,)).fetchone()
         if row:
             existing_by_lic[str(lic_no).strip()] = dict(row)
@@ -229,14 +239,16 @@ def import_commit(data: dict = Body(...), request: Request = None):
     flags = cached.get("flags") or []
     skip_indices = set(data.get("skip_indices") or [])
 
-    # backup the database first
-    backup = None
+    # Back up the database first -- and ABORT if that fails.
+    # This used to be `except Exception: backup = None`, i.e. the import went
+    # ahead anyway with no safety net, which is exactly the situation where
+    # you most need one. It also used shutil.copy() on the live database,
+    # which can capture it mid-write and produce a backup that won't open.
     try:
-        if os.path.exists(DB):
-            backup = f"telco_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-            shutil.copy(DB, backup)
-    except Exception:
-        backup = None
+        backup = safe_db_backup("import")
+    except Exception as e:
+        raise HTTPException(500,
+            f"Could not create a safety backup before importing, so nothing was imported: {e}")
 
     import json as _json
     src_filename = cached.get("filename") or "Excel import"

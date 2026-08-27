@@ -129,6 +129,9 @@ cur.execute("CREATE INDEX idx_licenses_license_no ON licenses(license_no);")
 cur.execute("CREATE INDEX idx_licenses_licensee   ON licenses(licensee);")
 cur.execute("CREATE INDEX idx_licenses_province   ON licenses(province);")
 cur.execute("CREATE INDEX idx_payments_license_id ON payments(license_id);")
+# NOTE: the deleted_at / renewed_from / created_at indexes are created by
+# ensure_schema() in app/core.py instead, not here -- those columns are added
+# by its ALTER statements at startup and don't exist yet at this point.
 
 conn.commit()
 

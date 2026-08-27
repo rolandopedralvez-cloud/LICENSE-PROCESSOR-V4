@@ -210,19 +210,61 @@ def _add_one_year(iso_date):
     """'2025-06-28' -> '2026-06-28' -- used to roll a record's validity
     period forward by exactly one year on renewal (e.g. 2025-2026 becomes
     2026-2027). Falls back to Feb 28 for a Feb 29 source date landing on a
-    non-leap year. Returns None for anything blank/unparseable."""
+    non-leap year.
+
+    Returns None only when there was nothing to roll forward in the first
+    place (blank/empty). For a value that IS present but can't be read as a
+    date, this raises ValueError instead of returning None -- batch_renew
+    catches that and reports the record as failed. Returning None there is
+    what used to silently blank out a real validity period during an
+    "overwrite" batch renew, with no history copy to restore from.
+
+    Accepts the date shapes that actually turn up in this database, not just
+    ISO: '2025-06-28', '2025/06/28', '06/28/2025' and '28-06-2025'."""
     import datetime
-    if not iso_date:
+    if iso_date is None:
         return None
-    s = str(iso_date)[:10]
+    s = str(iso_date).strip()
+    if not s:
+        return None
+    s = s.replace("T", " ").split(" ")[0]          # drop any time part
+
+    parts = None
+    for sep in ("-", "/", "."):
+        if sep in s:
+            bits = [b for b in s.split(sep) if b != ""]
+            if len(bits) == 3:
+                parts = bits
+            break
+    if not parts:
+        raise ValueError(f"unreadable date: {iso_date!r}")
+
     try:
-        y, m, d = (int(p) for p in s.split("-"))
+        a, b, c = (int(x) for x in parts)
     except Exception:
-        return None
+        raise ValueError(f"unreadable date: {iso_date!r}")
+
+    if len(parts[0]) == 4:            # 2025-06-28  (year first)
+        y, m, d = a, b, c
+    elif a > 12:                      # 28-06-2025  (day first)
+        d, m, y = a, b, c
+    else:                             # 06/28/2025  (US month first)
+        m, d, y = a, b, c
+
+    # The SOURCE must be a real calendar date. '2025-02-30' is not, and is a
+    # sign of bad stored data -- skip that record and let the user fix it
+    # rather than quietly inventing a nearby date for a government licence.
+    try:
+        datetime.date(y, m, d)
+    except ValueError:
+        raise ValueError(f"unreadable date: {iso_date!r}")
+
     try:
         return datetime.date(y + 1, m, d).isoformat()
     except ValueError:
-        return datetime.date(y + 1, m, d - 1).isoformat()   # Feb 29 -> Feb 28
+        # Only reachable for Feb 29 landing on a non-leap year -- the source
+        # was already checked as valid above, so Feb 28 is the right answer.
+        return datetime.date(y + 1, m, d - 1).isoformat()
 
 
 # NOTE: this decorator used to be attached to _add_one_year (the helper
@@ -272,10 +314,12 @@ def batch_renew(data: dict = Body(...), request: Request = None):
     writable = set(cols(conn, "licenses")) - PROTECTED
     new_ids = []
     overwritten_ids = []
+    failed = []          # records skipped because something was wrong with them
     try:
         for sid in source_ids:
             row = conn.execute("SELECT * FROM licenses WHERE id = ?", (sid,)).fetchone()
             if not row:
+                failed.append({"id": sid, "license_no": None, "reason": "record not found"})
                 continue
             src = dict(row)
             rec = {k: v for k, v in src.items() if k in writable}
@@ -284,10 +328,27 @@ def batch_renew(data: dict = Body(...), request: Request = None):
             rec["old_date"]     = src.get("rsl_date")
             rec["new_form_no"]  = None          # blank until the new form is issued
 
-            # roll the validity period forward one year from what it currently
-            # is, instead of leaving it blank for someone to fill in by hand
-            rec["validity_from"] = _add_one_year(src.get("validity_from"))
-            rec["validity_to"]   = _add_one_year(src.get("validity_to"))
+            # Roll the validity period forward one year from what it currently
+            # is, instead of leaving it blank for someone to fill in by hand.
+            #
+            # If either date can't be read, this record is SKIPPED rather than
+            # renewed with blank dates. Previously an unreadable date became
+            # None and, in "overwrite" mode, was written straight over the real
+            # validity period -- destroying it with no history copy to restore
+            # from. A skipped record is reported back to the user by license
+            # number so they can fix that one date and re-run it.
+            try:
+                new_from = _add_one_year(src.get("validity_from"))
+                new_to   = _add_one_year(src.get("validity_to"))
+            except ValueError as e:
+                failed.append({
+                    "id": sid,
+                    "license_no": src.get("license_no"),
+                    "reason": f"validity date can't be read ({e})",
+                })
+                continue
+            rec["validity_from"] = new_from
+            rec["validity_to"]   = new_to
 
             # shared batch data (one OR covers the batch)
             for k, v in shared.items():
@@ -316,16 +377,19 @@ def batch_renew(data: dict = Body(...), request: Request = None):
         conn.commit()
     finally:
         conn.close()
+    skipped_note = f"; {len(failed)} skipped" if failed else ""
     if mode == "overwrite":
-        log_activity(request, "batch_renew", detail=f"Batch renewed (overwrite) {len(overwritten_ids)} record(s) in place — no history copies kept")
-        return {"ok": True, "renewed": len(overwritten_ids), "new_ids": overwritten_ids, "mode": "overwrite"}
-    log_activity(request, "batch_renew", detail=f"Batch renewed {len(new_ids)} record(s) from {len(source_ids)} selected")
-    return {"ok": True, "renewed": len(new_ids), "new_ids": new_ids, "mode": "new"}
+        log_activity(request, "batch_renew", detail=f"Batch renewed (overwrite) {len(overwritten_ids)} record(s) in place — no history copies kept{skipped_note}")
+        return {"ok": True, "renewed": len(overwritten_ids), "new_ids": overwritten_ids,
+                "mode": "overwrite", "failed": failed}
+    log_activity(request, "batch_renew", detail=f"Batch renewed {len(new_ids)} record(s) from {len(source_ids)} selected{skipped_note}")
+    return {"ok": True, "renewed": len(new_ids), "new_ids": new_ids,
+            "mode": "new", "failed": failed}
 
 
 # ---------------------------------------------------------------- ANALYTICS
 @router.get("/api/licenses/{lic_id}/payments")
-def list_payments(lic_id: int):
+def list_payments(lic_id: int, request: Request = None):
     conn = get_conn()
     pays = conn.execute(
         "SELECT * FROM payments WHERE license_id = ? ORDER BY year", (lic_id,)).fetchall()
@@ -333,7 +397,12 @@ def list_payments(lic_id: int):
     return [dict(p) for p in pays]
 
 @router.post("/api/licenses/{lic_id}/payments")
-def add_payment(lic_id: int, data: dict = Body(...)):
+def add_payment(lic_id: int, data: dict = Body(...), request: Request = None):
+    # Payment/OR history is real financial data attached to a licence. These
+    # four routes used to be gated only by "are you signed in", so an account
+    # with no permissions ticked at all could add, change or delete OR
+    # records -- and none of it reached the Activity Log.
+    require_permission(request, "can_edit")
     conn = get_conn()
     if not conn.execute("SELECT 1 FROM licenses WHERE id = ?", (lic_id,)).fetchone():
         conn.close(); raise HTTPException(404, "License not found")
@@ -344,10 +413,13 @@ def add_payment(lic_id: int, data: dict = Body(...)):
            f"VALUES ({','.join('?' * len(fields))})")
     cur = conn.execute(sql, [payload[f] for f in fields])
     conn.commit(); pid = cur.lastrowid; conn.close()
+    log_activity(request, "payment_add", license_id=lic_id,
+                 detail=f"Added payment/OR record #{pid}")
     return {"ok": True, "payment_id": pid}
 
 @router.put("/api/payments/{pid}")
-def update_payment(pid: int, data: dict = Body(...)):
+def update_payment(pid: int, data: dict = Body(...), request: Request = None):
+    require_permission(request, "can_edit")
     conn = get_conn()
     if not conn.execute("SELECT 1 FROM payments WHERE id = ?", (pid,)).fetchone():
         conn.close(); raise HTTPException(404, "Payment not found")
@@ -359,13 +431,25 @@ def update_payment(pid: int, data: dict = Body(...)):
     conn.execute(f"UPDATE payments SET {sets} WHERE id = ?",
                  list(payload.values()) + [pid])
     conn.commit(); conn.close()
+    log_activity(request, "payment_edit", detail=f"Edited payment/OR record #{pid}")
     return {"ok": True, "payment_id": pid}
 
 @router.delete("/api/payments/{pid}")
-def delete_payment(pid: int):
+def delete_payment(pid: int, request: Request = None):
+    require_permission(request, "can_delete")
     conn = get_conn()
+    # Read it first so the Activity Log can record WHAT was deleted, not just
+    # that something was -- a deleted payment row is otherwise unrecoverable
+    # and left no trace of who removed it or what it said.
+    old = conn.execute("SELECT * FROM payments WHERE id = ?", (pid,)).fetchone()
     cur = conn.execute("DELETE FROM payments WHERE id = ?", (pid,))
     conn.commit(); conn.close()
     if cur.rowcount == 0:
         raise HTTPException(404, "Payment not found")
+    o = dict(old) if old else {}
+    log_activity(request, "payment_delete", license_id=o.get("license_id"),
+                 detail=f"Deleted payment/OR record #{pid} "
+                        f"(year={o.get('year')}, OR={o.get('or_no')}, "
+                        f"date={o.get('or_date')}, amount={o.get('or_amount')}, "
+                        f"SUF={o.get('suf_paid')})")
     return {"ok": True, "deleted": pid}

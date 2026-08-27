@@ -22,36 +22,21 @@
       } catch (e) {}
     })();
   </script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    // Custom palette on top of Tailwind's defaults -- gives the AdminLTE-ish
-    // "brand purple" topbar / near-black sidebar a name so templates don't
-    // have to hardcode hex classes everywhere. Pure styling, no behavior.
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              DEFAULT: '#5b21b6',
-              50:  '#f5f3ff',
-              100: '#ede9fe',
-              200: '#ddd6fe',
-              500: '#7c3aed',
-              600: '#6d28d9',
-              700: '#5b21b6',
-              800: '#4c1d95',
-              900: '#3b1370',
-            },
-            sidebar: {
-              DEFAULT: '#1a1d29',
-              light: '#232634',
-            },
-          },
-        },
-      },
-    };
-  </script>
+  <script src="/static/vendor/htmx.min.js"></script>
+  <!-- Tailwind, built ahead of time into one small stylesheet ----------
+       This was <script src="https://cdn.tailwindcss.com"></script>, which
+       downloads a ~400KB compiler on EVERY page load and needs the internet
+       to work at all. app/static/vendor/tailwind.css is the same styling
+       compiled down to only the classes this app actually uses (about 30KB),
+       so pages render instantly and work with no connection.
+
+       The brand purple / sidebar colours that used to be configured in the
+       tailwind.config block below are baked into that file.
+
+       IF YOU EVER ADD NEW TAILWIND CLASSES to a template that weren't used
+       anywhere before, they won't be in this file yet. Ask Claude to rebuild
+       app/static/vendor/tailwind.css and the new classes will be included. -->
+  <link rel="stylesheet" href="/static/vendor/tailwind.css">
   <style>
     .htmx-indicator{opacity:0;transition:opacity .15s ease-in}
     .htmx-request.htmx-indicator,.htmx-request .htmx-indicator{opacity:1}
@@ -369,6 +354,41 @@
   </script>
 </head>
 <body class="bg-gray-100 text-gray-900">
+  <!-- ---- Offline / blocked-CDN notice ------------------------------------
+       Tailwind, htmx and Leaflet are loaded from the internet. On an office
+       PC with no connection (or behind a filter) those requests fail and the
+       app renders as unstyled text with dead buttons -- which looks like the
+       app itself is broken, with nothing on screen explaining why. This says
+       what actually happened, in plain language, instead of leaving someone
+       guessing. It only ever appears when a required file really is missing. -->
+  <div id="ntc-offline-banner"
+       style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;
+              background:#b45309;color:#fff;font:14px/1.4 system-ui,sans-serif;
+              padding:10px 14px;text-align:center;">
+    <strong>Some app files didn&rsquo;t load.</strong>
+    Your data is safe, but the screen may look plain and some buttons may not respond.
+    Press <strong>Ctrl&nbsp;+&nbsp;R</strong> to reload. If it keeps happening, restart the app with start.bat.
+  </div>
+  <script>
+    // Tailwind's CDN script defines window.tailwind; htmx defines window.htmx.
+    // If either is missing shortly after load, something didn't download.
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        // Everything the app needs is served locally now, so this should
+        // never fire. Kept as a safety net: if htmx or the stylesheet fail
+        // to load for any reason, say so in plain language instead of
+        // leaving a broken-looking screen with no explanation.
+        var cssOk = Array.from(document.styleSheets).some(function (sh) {
+          return (sh.href || '').indexOf('/static/vendor/tailwind.css') !== -1;
+        });
+        var missing = (typeof window.htmx === 'undefined') || !cssOk;
+        if (missing) {
+          var b = document.getElementById('ntc-offline-banner');
+          if (b) { b.style.display = 'block'; document.body.style.paddingTop = '52px'; }
+        }
+      }, 1200);
+    });
+  </script>
   {% block body %}
   <main class="max-w-5xl mx-auto p-6">
     {% block content %}{% endblock %}

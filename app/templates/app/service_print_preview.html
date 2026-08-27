@@ -9,23 +9,32 @@
      Print Preview (still on the license form's Print▾ menu) -- nothing
      here changes that flow. -->
 
-<div class="min-h-screen bg-gray-200">
+<div id="ppv-shell" class="min-h-screen bg-gray-200">
 
-  <!-- toolbar -->
-  <div id="ppv-toolbar" class="no-print sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-4 py-2 flex flex-wrap items-center gap-x-1 gap-y-2">
-    <a href="/app/services/{{ service_id }}/records/{{ record_id }}" class="text-sm text-brand-600 hover:underline font-medium flex items-center gap-1 mr-1">
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-      Back to record
-    </a>
-    <span class="text-sm text-gray-400 hidden md:inline mr-auto pl-1 border-l border-gray-200 truncate max-w-xs">{{ service_name or '' }} &middot; Record #{{ record_id }}</span>
+  <!-- toolbar (Word-ribbon style: light gray band, grouped controls with
+       small captions under each group, thin dividers between groups) -->
+  <div id="ppv-toolbar" class="no-print fixed top-0 left-0 right-0 z-20 ppv-ribbon border-b border-gray-300 shadow-sm px-3 pt-2 pb-1 flex flex-wrap items-end gap-x-0 gap-y-2">
+    <div class="ppv-group !border-r-0 !px-2">
+      <a href="/app/services/{{ service_id }}/records/{{ record_id }}" class="text-sm text-brand-700 hover:underline font-medium flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        Back
+      </a>
+      <span class="ppv-group-label">Record</span>
+    </div>
+    <span class="text-xs text-gray-500 hidden md:inline mr-auto pl-3 self-center truncate max-w-xs">{{ service_name or '' }} &middot; Record #{{ record_id }}</span>
 
-    <div class="flex items-center gap-1.5">
-      <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Design Mode: Off</button>
-      <select id="ppv-box-picker" class="hidden text-xs border border-gray-300 rounded-md px-1.5 py-1.5 max-w-[170px] bg-white hover:border-gray-400 transition-colors">
-        <option value="">Jump to box&hellip;</option>
-      </select>
-      <div id="ppv-page-size" class="hidden flex items-center gap-1 text-xs">
-        <span class="text-gray-400">Paper</span>
+    <div class="ppv-group">
+      <div class="flex items-center gap-1.5">
+        <button id="ppv-design-toggle" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors shadow-sm">Design Mode: Off</button>
+        <select id="ppv-box-picker" class="hidden text-xs border border-gray-300 rounded-md px-1.5 py-1.5 max-w-[170px] bg-white hover:border-gray-400 transition-colors">
+          <option value="">Jump to box&hellip;</option>
+        </select>
+      </div>
+      <span class="ppv-group-label">Design</span>
+    </div>
+
+    <div id="ppv-page-size" class="ppv-group hidden">
+      <div class="flex items-center gap-1 text-xs">
         <select id="ppv-page-preset" class="border border-gray-300 rounded-md px-1.5 py-1.5 text-xs bg-white hover:border-gray-400 transition-colors">
           <option value="612x792">Short / Letter (8.5&times;11)</option>
           <option value="612x936">Long / Folio (8.5&times;13)</option>
@@ -36,92 +45,105 @@
         <input id="ppv-page-w" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded-md px-1.5 py-1.5 text-xs" placeholder="W in">
         <span id="ppv-page-x" class="hidden text-gray-400">&times;</span>
         <input id="ppv-page-h" type="number" step="0.1" min="1" class="hidden w-14 border border-gray-300 rounded-md px-1.5 py-1.5 text-xs" placeholder="H in">
-        <button id="ppv-page-apply" class="border border-gray-300 rounded-md px-2.5 py-1.5 text-xs hover:bg-gray-50 transition-colors">Apply</button>
+        <button id="ppv-page-apply" class="border border-gray-300 rounded-md px-2.5 py-1.5 text-xs bg-white hover:bg-gray-50 transition-colors">Apply</button>
       </div>
+      <span class="ppv-group-label">Paper</span>
     </div>
 
-    <span id="ppv-tb-div-1" class="hidden w-px h-5 bg-gray-200 mx-0.5"></span>
-
-    <div class="flex items-center gap-1.5">
-      <button id="ppv-undo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Undo (Ctrl+Z)">&#8630;</button>
-      <button id="ppv-redo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Redo (Ctrl+Y)">&#8631;</button>
+    <div class="ppv-group">
+      <div class="flex items-center gap-1.5">
+        <button id="ppv-undo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center bg-white hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Undo (Ctrl+Z)">&#8630;</button>
+        <button id="ppv-redo" class="hidden text-xs font-medium border border-gray-300 rounded-md w-8 h-8 flex items-center justify-center bg-white hover:bg-gray-50 disabled:opacity-40 transition-colors" title="Redo (Ctrl+Y)">&#8631;</button>
+      </div>
+      <span id="ppv-undo-label" class="hidden ppv-group-label">Undo</span>
     </div>
 
-    <span class="hidden w-px h-5 bg-gray-200 mx-0.5" id="ppv-tb-div-2"></span>
-
-    <div class="flex items-center gap-1.5">
-      <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">+ Text Box</button>
-      <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Page Number</button>
-      <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-200 text-red-600 rounded-md px-3 py-1.5 hover:bg-red-50 transition-colors">Delete Box</button>
+    <div class="ppv-group">
+      <div class="flex items-center gap-1.5">
+        <button id="ppv-add-text" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">+ Text Box</button>
+        <button id="ppv-add-pagenum" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors" title="A movable (1/8)-style page counter, filled in automatically during Mass Print">+ Page Number</button>
+        <button id="ppv-delete-box" class="hidden text-xs font-medium border border-red-200 text-red-600 rounded-md px-3 py-1.5 bg-white hover:bg-red-50 transition-colors">Delete Box</button>
+      </div>
+      <span id="ppv-insert-label" class="hidden ppv-group-label">Insert</span>
     </div>
 
-    <span class="hidden w-px h-5 bg-gray-200 mx-0.5" id="ppv-tb-div-3"></span>
-
-    <div class="flex items-center gap-1.5">
-      <div class="relative">
-        <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Layout History &#9662;</button>
-        <div id="ppv-history-menu" class="hidden absolute right-0 mt-1 w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-100 py-1 z-40 text-sm max-h-[28rem] overflow-y-auto">
-          <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
-          <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
-          <div class="h-px bg-gray-100 my-1"></div>
-          <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
-          <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+    <div class="ppv-group">
+      <div class="flex items-center gap-1.5">
+        <div class="relative">
+          <button id="ppv-history-btn" class="hidden text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">Layout History &#9662;</button>
+          <div id="ppv-history-menu" class="hidden absolute left-0 mt-1 w-72 bg-white text-gray-800 rounded-md shadow-lg border border-gray-100 py-1 z-40 text-sm max-h-[28rem] overflow-y-auto">
+            <button id="ppv-history-save" class="w-full text-left px-4 py-2 hover:bg-gray-50 font-medium text-brand-600">+ Save Current As New Version</button>
+            <button id="ppv-history-setdefault" class="w-full text-left px-4 py-2 hover:bg-gray-50">Set Current as My Default</button>
+            <div class="h-px bg-gray-100 my-1"></div>
+            <div class="px-4 pt-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Saved Versions</div>
+            <div id="ppv-history-list" class="px-2 pb-2 text-xs text-gray-500">Loading&hellip;</div>
+          </div>
         </div>
+        <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-200 text-amber-700 rounded-md px-3 py-1.5 bg-white hover:bg-amber-50 transition-colors">Reset to Default</button>
+        <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Save Layout</button>
       </div>
-      <button id="ppv-reset" class="hidden text-xs font-medium border border-amber-200 text-amber-700 rounded-md px-3 py-1.5 hover:bg-amber-50 transition-colors">Reset to Default</button>
-      <button id="ppv-save" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Save Layout</button>
+      <span id="ppv-layout-label" class="hidden ppv-group-label">Layout</span>
     </div>
 
-    <span id="ppv-tb-div-4" class="hidden w-px h-5 bg-gray-200 mx-0.5"></span>
-
-    <div class="flex items-center gap-1.5">
-      <button id="ppv-print" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 transition-colors">Print</button>
-      <button id="ppv-pdf" class="text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Export PDF</button>
+    <div class="ppv-group !border-r-0">
+      <div class="flex items-center gap-1.5">
+        <button id="ppv-print" class="text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">Print</button>
+        <button id="ppv-pdf" class="text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-1.5 shadow-sm transition-colors">Export PDF</button>
+      </div>
+      <span class="ppv-group-label">Output</span>
     </div>
   </div>
 
-  <!-- box-editor mini toolbar (design mode + a box selected) -->
+  <!-- box-editor mini toolbar (Word's "Mini Toolbar" style). Shown for the
+       whole time Design Mode is on -- a "permanent" fixture, not something
+       that pops in/out as boxes get selected/deselected -- so it never
+       jumps around while scrolling. Its controls are simply greyed out
+       (via the .ppv-empty class) until a box is actually selected. -->
   <div id="ppv-box-toolbar" class="no-print hidden fixed left-0 right-0 z-30 bg-gray-800 text-white shadow-md px-4 py-2 flex items-center gap-x-2 gap-y-1.5 text-xs flex-wrap">
-    <div class="flex items-center gap-1.5">
-      <select id="ppv-font-family" class="bg-gray-700 text-white rounded-md px-2 py-1.5 text-xs border-none hover:bg-gray-600 transition-colors">
-        <option value="Helvetica">Sans-serif</option>
-        <option value="Times-Roman">Serif</option>
-        <option value="Courier">Monospace</option>
-      </select>
-      <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5" title="Font size">
-        <button id="ppv-font-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
-        <span id="ppv-font-size" class="w-6 text-center">10</span>
-        <button id="ppv-font-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+    <span id="ppv-box-toolbar-hint" class="hidden text-gray-400 italic">Click a box on the certificate to edit its font, spacing, or color&hellip;</span>
+
+    <div class="ppv-box-controls flex items-center gap-x-2 gap-y-1.5 flex-wrap">
+      <div class="flex items-center gap-1.5">
+        <select id="ppv-font-family" class="bg-gray-700 text-white rounded-md px-2 py-1.5 text-xs border-none hover:bg-gray-600 transition-colors">
+          <option value="Helvetica">Sans-serif</option>
+          <option value="Times-Roman">Serif</option>
+          <option value="Courier">Monospace</option>
+        </select>
+        <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5" title="Font size">
+          <button id="ppv-font-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
+          <span id="ppv-font-size" class="w-6 text-center">10</span>
+          <button id="ppv-font-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+        </div>
+        <label class="flex items-center gap-1.5 bg-gray-700 rounded-md px-2.5 py-1.5 cursor-pointer hover:bg-gray-600 transition-colors">
+          <input type="checkbox" id="ppv-font-bold" class="accent-brand-500"> Bold
+        </label>
       </div>
-      <label class="flex items-center gap-1.5 bg-gray-700 rounded-md px-2.5 py-1.5 cursor-pointer hover:bg-gray-600 transition-colors">
-        <input type="checkbox" id="ppv-font-bold" class="accent-brand-500"> Bold
-      </label>
-    </div>
 
-    <span class="w-px h-5 bg-white/15"></span>
+      <span class="w-px h-5 bg-white/15"></span>
 
-    <div class="flex items-center gap-1.5">
-      <span class="text-gray-400">Spacing</span>
-      <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5">
-        <button id="ppv-lh-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
-        <span id="ppv-lh-label" class="w-7 text-center">1.2</span>
-        <button id="ppv-lh-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+      <div class="flex items-center gap-1.5">
+        <span class="text-gray-400">Spacing</span>
+        <div class="flex items-center gap-0.5 bg-gray-700 rounded-md px-1 py-0.5">
+          <button id="ppv-lh-minus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">&minus;</button>
+          <span id="ppv-lh-label" class="w-7 text-center">1.2</span>
+          <button id="ppv-lh-plus" class="w-6 h-6 rounded hover:bg-white/10 transition-colors flex items-center justify-center">+</button>
+        </div>
       </div>
+
+      <span class="w-px h-5 bg-white/15"></span>
+
+      <div class="flex items-center gap-1.5">
+        <label class="flex items-center bg-gray-700 rounded-md p-1 cursor-pointer hover:bg-gray-600 transition-colors" title="Text color">
+          <input type="color" id="ppv-font-color" value="#000000" class="w-6 h-5 rounded border-none bg-transparent p-0 cursor-pointer">
+        </label>
+        <button id="ppv-font-hide" class="text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Turns the text white so it's invisible on this printout">Hide</button>
+        <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Back to black text">Unhide</button>
+      </div>
+
+      <span class="w-px h-5 bg-white/15"></span>
+
+      <button id="ppv-edit-fieldval" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 transition-colors" title="Fix the actual stored value for this record's field -- e.g. clean up messy text">Edit Value&hellip;</button>
     </div>
-
-    <span class="w-px h-5 bg-white/15"></span>
-
-    <div class="flex items-center gap-1.5">
-      <label class="flex items-center bg-gray-700 rounded-md p-1 cursor-pointer hover:bg-gray-600 transition-colors" title="Text color">
-        <input type="color" id="ppv-font-color" value="#000000" class="w-6 h-5 rounded border-none bg-transparent p-0 cursor-pointer">
-      </label>
-      <button id="ppv-font-hide" class="text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Turns the text white so it's invisible on this printout">Hide</button>
-      <button id="ppv-font-unhide" class="hidden text-xs border border-white/20 rounded-md px-2.5 py-1.5 hover:bg-white/10 transition-colors" title="Back to black text">Unhide</button>
-    </div>
-
-    <span class="w-px h-5 bg-white/15"></span>
-
-    <button id="ppv-edit-fieldval" class="hidden text-xs font-medium bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 transition-colors" title="Fix the actual stored value for this record's field -- e.g. clean up messy text">Edit Value&hellip;</button>
 
     <span class="text-gray-400 ml-auto hidden lg:inline" title="e.g. type Owner: {owner_name} to mix plain text with a live field">Double-click text to edit &middot; type {fieldname} for a merge field</span>
   </div>
@@ -211,6 +233,38 @@
       repeating-linear-gradient(to bottom, rgba(109,41,217,0.12) 0, rgba(109,41,217,0.12) 1px, transparent 1px, transparent 36pt);
   }
   #ppv-page.design-on #ppv-grid { display: block; }
+
+  /* ---- Word-ribbon look for the top toolbar ------------------------- */
+  .ppv-ribbon {
+    background: linear-gradient(to bottom, #fbfbfc, #eef0f3);
+  }
+  /* Each cluster of controls sits in its own "group" with a small caption
+     underneath, the way Word's Home/Insert/Layout ribbon groups work
+     (Font, Paragraph, Clipboard, etc.) -- purely cosmetic, doesn't change
+     any element's id or behavior. */
+  .ppv-group {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 2px 12px; border-right: 1px solid #d9dce1;
+  }
+  .ppv-group-label {
+    font-size: 10px; line-height: 1; color: #8b8f99; text-transform: uppercase;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+
+  /* ---- Fixed toolbar stack ------------------------------------------
+     Both bars are position:fixed so they stay on screen no matter how far
+     down the certificate you scroll -- #ppv-shell below gets padding-top
+     added by JS (updateLayoutOffsets()) equal to however tall the bars
+     currently are, so the certificate itself never starts out hidden
+     underneath them. */
+  #ppv-toolbar, #ppv-box-toolbar { left: 0; right: 0; }
+
+  /* ---- "Permanent" mini toolbar (the black box) ---------------------
+     Design Mode keeps this bar on screen the whole time, whether or not a
+     box is currently selected. When nothing is selected its controls are
+     simply greyed out and inert rather than the whole bar disappearing. */
+  #ppv-box-toolbar.ppv-empty .ppv-box-controls { opacity: 0.35; pointer-events: none; }
+  #ppv-box-toolbar:not(.ppv-empty) #ppv-box-toolbar-hint { display: none; }
 </style>
 
 <script>
@@ -277,6 +331,7 @@
 
   function renderAll() {
     applyPageSize();
+    if (typeof updateLayoutOffsets === 'function') updateLayoutOffsets();
     pageEl.querySelectorAll('.ppv-box').forEach(function (el) { el.remove(); });
     (TEMPLATE.boxes || []).forEach(function (box) {
       const el = document.createElement('div');
@@ -385,13 +440,24 @@
 
   // ---- the box toolbar is pinned to the top of the page, directly under
   // the main toolbar -- it no longer follows the selected box around the
-  // page or drags, so it always stays put exactly where you expect it.
+  // page or drags, so it always stays put exactly where you expect it. Both
+  // bars are position:fixed (see the CSS above), so this position holds no
+  // matter how far the certificate below is scrolled.
   const mainToolbarEl = document.getElementById('ppv-toolbar');
+  const shellEl = document.getElementById('ppv-shell');
   function positionBoxToolbar() {
     boxToolbar.style.left = '0px';
     boxToolbar.style.top = mainToolbarEl.getBoundingClientRect().bottom + 'px';
   }
-  window.addEventListener('resize', function () { if (!boxToolbar.classList.contains('hidden')) positionBoxToolbar(); });
+  // Keeps the certificate from starting out underneath the fixed toolbar
+  // stack -- recomputed whenever the stack's height can change (window
+  // resize/reflow, or the box toolbar showing/hiding with Design Mode).
+  function updateLayoutOffsets() {
+    positionBoxToolbar();
+    const boxToolbarH = boxToolbar.classList.contains('hidden') ? 0 : boxToolbar.getBoundingClientRect().height;
+    shellEl.style.paddingTop = (mainToolbarEl.getBoundingClientRect().height + boxToolbarH + 12) + 'px';
+  }
+  window.addEventListener('resize', updateLayoutOffsets);
 
   // ---------------------------------------------------------------- Undo / Redo
   // A plain snapshot-based undo stack -- simple and reliable for a document
@@ -483,7 +549,14 @@
     if (typeof deselectImage === 'function') deselectImage();
     colorDirty = false;
     document.getElementById('ppv-delete-box').classList.toggle('hidden', !el || !DESIGN_ON);
-    if (!el) { boxToolbar.classList.add('hidden'); return; }
+    if (!el) {
+      // No box selected -- the mini toolbar stays on screen (it's
+      // "permanent" while Design Mode is on), just greyed out and inert
+      // until something is picked.
+      boxToolbar.classList.toggle('ppv-empty', DESIGN_ON);
+      return;
+    }
+    boxToolbar.classList.remove('ppv-empty');
     el.classList.add('selected');
     const box = findBox(el.dataset.id);
     const firstRun = box.paragraphs[0] && box.paragraphs[0].runs.find(function (r) { return r.type !== 'br'; });
@@ -835,11 +908,17 @@
     document.getElementById('ppv-undo').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-redo').classList.toggle('hidden', !DESIGN_ON);
     document.getElementById('ppv-history-btn').classList.toggle('hidden', !DESIGN_ON);
-    ['ppv-tb-div-1', 'ppv-tb-div-2', 'ppv-tb-div-3', 'ppv-tb-div-4'].forEach(function (id) {
+    ['ppv-undo-label', 'ppv-insert-label', 'ppv-layout-label'].forEach(function (id) {
       document.getElementById(id).classList.toggle('hidden', !DESIGN_ON);
     });
-    if (DESIGN_ON) { syncPageSizeControls(); updateUndoRedoButtons(); }
+    // The mini toolbar (the "black box") is now permanent for the whole
+    // time Design Mode is on -- it shows/hides only with Design Mode
+    // itself, never on a per-box-selection basis.
+    boxToolbar.classList.toggle('hidden', !DESIGN_ON);
+    document.getElementById('ppv-box-toolbar-hint').classList.toggle('hidden', !DESIGN_ON);
+    if (DESIGN_ON) { syncPageSizeControls(); updateUndoRedoButtons(); boxToolbar.classList.add('ppv-empty'); }
     if (!DESIGN_ON) { selectBox(null); deselectImage(); document.getElementById('ppv-history-menu').classList.add('hidden'); }
+    updateLayoutOffsets();
   });
 
   // ---- paper size -- lets Design Mode target a different bond paper size

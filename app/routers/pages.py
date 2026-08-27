@@ -103,23 +103,98 @@ def app_home(request: Request):
     return templates.TemplateResponse(request, "app/licenses_list.html", {})
 
 
+# Columns the results table is allowed to sort by. Whitelisted deliberately:
+# the sort key arrives from the browser and is used to pick a column, so it
+# must never be taken as free text.
+SORTABLE = {
+    "license_no": License.license_no,
+    "licensee": License.licensee,
+    "site_name": License.site_name,
+    "province": License.province,
+    "status": License.license_status,
+    "id": License.id,
+}
+
+PAGE_SIZE = 100
+
+
 @router.get("/app/licenses/results")
-def app_licenses_results(request: Request, q: str = "", _user=Depends(require_login), db: Session = Depends(get_db)):
+def app_licenses_results(
+    request: Request,
+    q: str = "",
+    province: str = "",
+    status: str = "",
+    licensee: str = "",
+    sort: str = "id",
+    dir: str = "desc",
+    offset: int = 0,
+    partial: str = "",
+    _user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    """Search results for the dashboard.
+
+    Three things changed here, all of which the screen was getting wrong:
+
+    1. It searched only 4 columns (licensee / license_no / site_name / or_no)
+       while /api/licenses searched 10 -- so typing a municipality or a
+       barangay in the main search box found nothing, even though the data
+       was right there. Same field list as the API now.
+    2. It returned a bare .limit(100) with no total and no paging, and the
+       page showed no count -- so a search matching 400 records looked
+       exactly like one matching 100, and a clerk could conclude a station
+       wasn't registered when it was. The total is returned now and the
+       template shows "Showing X of Y" plus a Load More button.
+    3. There was no sorting or filtering at all, even though the province /
+       status / licensee filters already existed on the JSON API.
+    """
     query = db.query(License).filter(License.deleted_at.is_(None))
     if q:
         like = f"%{q}%"
         query = query.filter(
             or_(
-                License.licensee.ilike(like),
                 License.license_no.ilike(like),
+                License.site_no.ilike(like),
                 License.site_name.ilike(like),
+                License.brgy.ilike(like),
+                License.town.ilike(like),
+                License.province.ilike(like),
+                License.licensee.ilike(like),
+                License.tech.ilike(like),
                 License.or_no.ilike(like),
+                License.or_date.ilike(like),
             )
         )
-    results = query.order_by(License.id.desc()).limit(100).all()
-    return templates.TemplateResponse(
-        request, "app/_license_rows.html", {"results": results}
-    )
+    if province:
+        query = query.filter(License.province == province)
+    if status:
+        query = query.filter(License.license_status == status)
+    if licensee:
+        query = query.filter(License.licensee == licensee)
+
+    total = query.count()
+
+    col = SORTABLE.get(sort, License.id)
+    query = query.order_by(col.asc() if dir == "asc" else col.desc())
+
+    offset = max(0, offset)
+    results = query.limit(PAGE_SIZE).offset(offset).all()
+
+    shown_to = offset + len(results)
+    ctx = {
+        "results": results,
+        "total": total,
+        "offset": offset,
+        "shown_to": shown_to,
+        "has_more": shown_to < total,
+        "next_offset": shown_to,
+        "q": q, "province": province, "status": status, "licensee": licensee,
+        "sort": sort, "dir": dir,
+    }
+    # "partial" = the Load More button asking for the NEXT page: return just
+    # the extra rows, which htmx appends, instead of the whole table again.
+    tpl = "app/_license_row_items.html" if partial else "app/_license_rows.html"
+    return templates.TemplateResponse(request, tpl, ctx)
 
 
 # A curated subset of `licenses` columns for the new form -- not all 63+.

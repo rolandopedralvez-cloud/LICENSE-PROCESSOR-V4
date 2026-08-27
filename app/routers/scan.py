@@ -218,11 +218,25 @@ def approve_quarantine_scan(scan_id: int, request: Request = None):
     if not lic_no:
         conn.close(); raise HTTPException(400, "License No. is required before this can be approved")
 
-    existing = conn.execute("SELECT * FROM licenses WHERE TRIM(license_no) = TRIM(?) ORDER BY id DESC LIMIT 1", (lic_no,)).fetchone()
+    # A record sitting in the Trash used to be reported here as "already
+    # exists ... edit that record directly" -- pointing the reviewer at a
+    # record that doesn't show up anywhere in search, because it's deleted.
+    # Live matches and trashed matches now get different, accurate messages.
+    existing = conn.execute(
+        "SELECT * FROM licenses WHERE TRIM(license_no) = TRIM(?) AND deleted_at IS NULL "
+        "ORDER BY id DESC LIMIT 1", (lic_no,)).fetchone()
     if existing:
         conn.close()
         raise HTTPException(409, f"License {lic_no} already exists in the database (record #{existing['id']}). "
                                   f"Edit that record directly instead of approving this scan as a new one.")
+    trashed = conn.execute(
+        "SELECT id FROM licenses WHERE TRIM(license_no) = TRIM(?) AND deleted_at IS NOT NULL "
+        "ORDER BY id DESC LIMIT 1", (lic_no,)).fetchone()
+    if trashed:
+        conn.close()
+        raise HTTPException(409, f"License {lic_no} is in the Trash (record #{trashed['id']}). "
+                                  f"Restore it from Trash and edit it, or empty it from the Trash first "
+                                  f"if you want to approve this scan as a brand-new record.")
 
     writable = set(cols(conn, "licenses")) - PROTECTED
     payload = {k: v for k, v in fields.items() if k in writable and v not in (None, "")}

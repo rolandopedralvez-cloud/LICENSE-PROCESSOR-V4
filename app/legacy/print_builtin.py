@@ -52,18 +52,37 @@ _FREQ_TOKEN_RE = re.compile(r'\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?')
 
 
 def _clean_freq_display(v):
+    """Tidy a stored frequency value for printing WITHOUT rewriting it.
+
+    This used to pull number-like tokens out with a regex and re-join them,
+    throwing away everything else. On a real certificate that produced:
+
+        "2400-2483.5 MHz"         -> "2400-2483.5"     (unit silently dropped)
+        "Freq 1: 900 MHz (Band 8)" -> "1 / 900 / 8"    (nonsense)
+        "TX 450.500 RX 455.500"   -> "450.500 / 455.500"  (TX/RX labels lost)
+
+    ...and nothing flagged it, so a wrong document went out to the licensee.
+
+    The only transformation actually wanted was collapsing a value that
+    repeats the same entry ("900 / 900" -> "900"). That is all this does now:
+    split on the separators people actually type, drop blanks, remove exact
+    repeats, and print everything else through untouched -- units, labels,
+    ranges and all.
+    """
     if not v:
         return ""
-    s = str(v)
-    tokens = _FREQ_TOKEN_RE.findall(s)
-    if not tokens:
-        return s.strip()  # no number-like text at all (e.g. "Please see attached.") -- leave as-is
+    s = str(v).replace("\r", "\n")
+    parts = [p.strip() for p in re.split(r"[\n;,/]+", s)]
+    parts = [re.sub(r"\s+", " ", p) for p in parts if p.strip()]
+    if not parts:
+        return re.sub(r"\s+", " ", str(v)).strip()
     seen = set()
     out = []
-    for t in tokens:
-        if t not in seen:
-            seen.add(t)
-            out.append(t)
+    for p in parts:
+        key = p.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
     return " / ".join(out)
 
 
@@ -174,10 +193,21 @@ def delete_history_entry(entry_id):
     return True
 
 
-def fetch_record(lic_id):
+def fetch_record(lic_id, include_deleted=False):
+    """Load one record for printing.
+
+    Deleted (trashed) records are NOT printable by default. Without the
+    deleted_at filter a record that had been deleted could still be pulled up
+    by id and printed as a perfectly valid-looking RSL certificate -- the
+    printed document gave no hint that the record no longer exists.
+    """
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
-    row = conn.execute("SELECT * FROM licenses WHERE id = ?", (lic_id,)).fetchone()
+    if include_deleted:
+        row = conn.execute("SELECT * FROM licenses WHERE id = ?", (lic_id,)).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM licenses WHERE id = ? AND deleted_at IS NULL", (lic_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 

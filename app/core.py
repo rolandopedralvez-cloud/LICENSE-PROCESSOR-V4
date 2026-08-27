@@ -14,10 +14,65 @@ from fastapi import HTTPException, Request
 from app.config import DB
 
 def get_conn():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=15.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    # ---- Multi-PC / background-thread safety -----------------------------
+    # start.bat binds 0.0.0.0, so several office PCs hit this same file at
+    # once, and a background sweep thread writes to it every 30 minutes on
+    # top of the SQLAlchemy connection pool. With the SQLite defaults
+    # (rollback journal, ~5s lock wait) that surfaces as random "database is
+    # locked" 500s in the middle of an Import or a Batch Renew.
+    #   WAL           -- readers no longer block the writer, and vice versa
+    #   busy_timeout  -- wait up to 15s for a lock instead of erroring at ~5s
+    # Both are per-connection settings that persist for this connection;
+    # journal_mode=WAL is a one-time property of the database file itself.
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 15000;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+    except Exception:
+        # A read-only folder or an exotic filesystem can refuse WAL. Not
+        # worth failing the whole request over -- carry on with the defaults.
+        pass
     return conn
+
+def safe_db_backup(reason="backup"):
+    """Make a genuinely restorable copy of telco.db and return its filename.
+
+    Uses SQLite's own online-backup API rather than shutil.copy(). A plain
+    file copy of a LIVE database can capture it mid-write -- several office
+    PCs use this app at once and a background sweep thread writes to the
+    same file every 30 minutes -- producing a "backup" that won't open when
+    it's finally needed. sqlite3's backup() takes a proper consistent
+    snapshot instead.
+
+    Raises on failure. Callers about to do something destructive must let
+    that propagate and abort, rather than carrying on with no safety net.
+    """
+    import datetime, os
+    if not os.path.exists(DB):
+        raise RuntimeError(f"database not found at {DB}")
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest_name = f"telco_backup_{stamp}.db"
+    dest_path = os.path.join(os.path.dirname(os.path.abspath(DB)) or ".", dest_name)
+    src = sqlite3.connect(DB)
+    dst = sqlite3.connect(dest_path)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    # A backup that exists but is empty/unreadable is worse than none, since
+    # it looks like protection -- open it and confirm it actually reads.
+    check = sqlite3.connect(dest_path)
+    try:
+        check.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+    finally:
+        check.close()
+    return dest_name
+
 
 def cols(conn, table):
     return [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
@@ -80,9 +135,39 @@ def any_user_exists():
     conn.close()
     return n > 0
 
+def _base_tables_missing(conn):
+    return not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='licenses'"
+    ).fetchone()
+
+
 def ensure_schema():
     """Create/upgrade tables that may be missing."""
     conn = get_conn()
+    # On a fresh PC where create_db.py was never run -- or when the app is
+    # started from the wrong folder, so DB points at a path with no database
+    # -- sqlite3.connect() silently creates an EMPTY file, and the first
+    # `ALTER TABLE licenses` below then died with
+    #   sqlite3.OperationalError: no such table: licenses
+    # i.e. a black window full of traceback at startup, plus a stray 0-byte
+    # telco.db left behind that a later "Backup Now" could copy over the real
+    # one. Build the two core tables instead; every ALTER/CREATE below is
+    # already idempotent and fills in the rest.
+    if _base_tables_missing(conn):
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS licenses (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                license_no  TEXT,
+                created_at  TEXT DEFAULT (datetime('now','localtime')),
+                updated_at  TEXT DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS payments (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                license_id INTEGER NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+                year       INTEGER
+            );
+        """)
+        conn.commit()
     # region_raw / class_of_station_raw: originally these were only ever
     # added by migrate.py's one-time Excel import (idempotent ALTERs run
     # there, not here) — meaning a database created via create_db.py alone
@@ -228,6 +313,32 @@ def ensure_schema():
             if changed:
                 conn.execute("UPDATE users SET permissions = ? WHERE username = ?", (_json.dumps(existing), r["username"]))
         conn.execute("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('perms_v2', '1')")
+
+    # ---- Indexes ---------------------------------------------------------
+    # create_db.py indexes license_no / licensee / province / payments only,
+    # and it never runs again on an existing database. Nearly every query in
+    # the app also filters on deleted_at (search, analytics, trash, stats),
+    # and the renewal-history and Recently-Added views sort on renewed_from /
+    # created_at -- all unindexed, so each of those did a full table scan
+    # that gets slower as the office adds records. Created here (IF NOT
+    # EXISTS) so an existing telco.db picks them up on the next start.
+    for stmt in (
+        "CREATE INDEX IF NOT EXISTS idx_licenses_deleted_at   ON licenses(deleted_at)",
+        "CREATE INDEX IF NOT EXISTS idx_licenses_renewed_from ON licenses(renewed_from)",
+        "CREATE INDEX IF NOT EXISTS idx_licenses_created_at   ON licenses(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_licenses_license_no   ON licenses(license_no)",
+        "CREATE INDEX IF NOT EXISTS idx_licenses_licensee     ON licenses(licensee)",
+        "CREATE INDEX IF NOT EXISTS idx_licenses_province     ON licenses(province)",
+        "CREATE INDEX IF NOT EXISTS idx_payments_license_id   ON payments(license_id)",
+        "CREATE INDEX IF NOT EXISTS idx_activity_log_ts       ON activity_log(ts)",
+    ):
+        try:
+            conn.execute(stmt)
+        except Exception:
+            # A column that doesn't exist on a very old database shouldn't
+            # stop the app from starting -- the ALTERs above normally add it.
+            pass
+
     conn.commit()
     conn.close()
 

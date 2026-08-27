@@ -119,12 +119,27 @@ window.purgeLic = function (id, el) {
 };
 
 document.getElementById('btn-empty-trash').addEventListener('click', function (evt) {
-  if (!confirm('Empty the entire Trash? This permanently deletes every record listed here and cannot be undone.')) return;
+  // Emptying the Trash destroys many records at once and cannot be undone.
+  // A single OK/Cancel box is one mis-click away from that, so this asks for
+  // the word EMPTY to be typed -- the same idea already used for Wipe All.
+  // (The server also takes a safety backup first and refuses to proceed if
+  // that backup can't be made.)
+  const count = document.querySelectorAll('#trash-body tr[data-lic-no]').length;
+  const typed = prompt(
+    'Permanently delete every record in the Trash' + (count ? ' (' + count + ' record(s))' : '') + '.\n' +
+    'This CANNOT be undone.\n\n' +
+    'Type  EMPTY  below to confirm:'
+  );
+  if (typed === null) return;
+  if (typed.trim().toUpperCase() !== 'EMPTY') {
+    window.ntcToast('Not emptied — you need to type EMPTY exactly.', true);
+    return;
+  }
   window.ntcBusy(evt.currentTarget, async function () {
     try {
       const r = await window.ntcFetchJSON('/api/trash/empty', { method: 'POST' });
       if (!r.ok) { window.ntcToast((r.body && r.body.detail) || 'Failed.', true); return; }
-      window.ntcToast('Trash emptied (' + ((r.body && r.body.purged) || 0) + ' removed).');
+      window.ntcToast('Trash emptied (' + ((r.body && r.body.purged) || 0) + ' removed). Backup: ' + ((r.body && r.body.backup) || 'n/a'));
       loadTrash();
     } catch (e) { window.ntcToast('Could not reach the server. Check your connection and try again.', true); }
   });
